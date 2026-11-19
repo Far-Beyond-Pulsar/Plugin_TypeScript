@@ -9,14 +9,14 @@ use pulsar_script_ts::{compile_class, ClassSchema, ClassSource, Severity};
 pub const CLASS_FILE: &str = "class.ts";
 pub const SCHEMA_FILE: &str = "class.schema.json";
 pub(crate) const LANGUAGE_ID: &str = "typescript";
-const GRAPH_FILE: &str = "graph_save.json";
 
 /// The directory name is the class name.
 fn class_name(dir: &Path) -> Option<String> {
     dir.file_name().and_then(|n| n.to_str()).map(str::to_owned)
 }
 
-/// Every `src/classes/<Class>/` of the project at `root` that has a `class.ts`.
+/// Every `src/classes/<Class>/` of the project at `root` that has a `class.ts`
+/// and is this language's alone (the host decides: `pulsar_class::is_owned_by`).
 fn class_dirs(root: &Path) -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = vfs::list_dir(&root.join("src").join("classes"))
         .map(|entries| {
@@ -24,6 +24,7 @@ fn class_dirs(root: &Path) -> Vec<PathBuf> {
                 .into_iter()
                 .map(|e| root.join("src").join("classes").join(&e.name))
                 .filter(|p| vfs::is_file(&p.join(CLASS_FILE)))
+                .filter(|p| pulsar_class::is_owned_by(p, LANGUAGE_ID))
                 .collect()
         })
         .unwrap_or_default();
@@ -31,27 +32,63 @@ fn class_dirs(root: &Path) -> Vec<PathBuf> {
     dirs
 }
 
-/// Whether this language may compile `dir`: see the crate docs.
-fn check_language(dir: &Path) -> Result<(), String> {
-    if vfs::is_file(&dir.join(GRAPH_FILE)) {
-        return Err(format!(
-            "this class has both `{CLASS_FILE}` (TypeScript) and `{GRAPH_FILE}` (Blueprint): a class has one language, so remove one of them"
-        ));
-    }
-    let written_by = pulsar_class::ModuleStore::for_class_dir(dir)
-        .and_then(|(entry, store)| store.language(&entry.id));
-    match written_by {
-        Some(other) if other != LANGUAGE_ID => Err(format!(
-            "its compiled module was written by the `{other}` language; delete its module from \
-             the project's {} to compile it as TypeScript",
-            pulsar_class::modules::STORE_DIR
-        )),
-        _ => Ok(()),
+fn diagnostic(class: &str, file: &Path, message: impl Into<String>) -> CompileDiagnostic {
+    CompileDiagnostic::error(Some(class.to_owned()), Some(file.to_path_buf()), message)
+}
+
+/// The class's saved field identity, when it has one; `Err` is the problem of
+/// an unreadable schema file.
+fn read_schema(class: &str, schema_path: &Path) -> Result<Option<ClassSchema>, CompileDiagnostic> {
+    match vfs::read_to_string(schema_path) {
+        Ok(text) => serde_json::from_str::<ClassSchema>(&text)
+            .map(Some)
+            .map_err(|e| diagnostic(class, schema_path, format!("`{SCHEMA_FILE}` is not valid: {e}"))),
+        Err(_) => Ok(None),
     }
 }
 
-fn diagnostic(class: &str, file: &Path, message: impl Into<String>) -> CompileDiagnostic {
-    CompileDiagnostic::error(Some(class.to_owned()), Some(file.to_path_buf()), message)
+/// The compiler's problems with `source` as the text of the class in `dir`:
+/// nothing is read from `class.ts` or written (the editor's live check, for
+/// unsaved text).
+pub fn check_class_source(
+    dir: &Path,
+    source: &str,
+    natives: &NativeRegistry,
+) -> Vec<CompileDiagnostic> {
+    let Some(class) = class_name(dir) else {
+        return Vec::new();
+    };
+    let file = dir.join(CLASS_FILE);
+    let previous = match read_schema(&class, &dir.join(SCHEMA_FILE)) {
+        Ok(schema) => schema,
+        Err(problem) => return vec![problem],
+    };
+    let compiled = compile_class(
+        &ClassSource {
+            class_name: &class,
+            file: CLASS_FILE,
+            source,
+            schema: previous.as_ref(),
+        },
+        natives,
+    );
+    problems_of(&class, &file, &compiled.diagnostics)
+}
+
+fn problems_of(class: &str, file: &Path, diagnostics: &[pulsar_script_ts::Diagnostic]) -> Vec<CompileDiagnostic> {
+    diagnostics
+        .iter()
+        .map(|d| CompileDiagnostic {
+            severity: match d.severity {
+                Severity::Error => DiagnosticSeverity::Error,
+                Severity::Warning => DiagnosticSeverity::Warning,
+            },
+            class: Some(class.to_owned()),
+            file: Some(file.to_path_buf()),
+            location: d.location(),
+            message: d.message.clone(),
+        })
+        .collect()
 }
 
 /// Compile `dir` (a class directory). With `write`, the module, language
@@ -66,9 +103,6 @@ pub fn compile_class_dir(
         return Vec::new();
     };
     let file = dir.join(CLASS_FILE);
-    if let Err(message) = check_language(dir) {
-        return vec![diagnostic(&class, &file, message)];
-    }
     let Some((entry, store)) = pulsar_class::ModuleStore::for_class_dir(dir) else {
         return vec![diagnostic(&class, &file, "the class is in no project")];
     };
@@ -77,18 +111,9 @@ pub fn compile_class_dir(
         Err(e) => return vec![diagnostic(&class, &file, format!("failed to read: {e}"))],
     };
     let schema_path = dir.join(SCHEMA_FILE);
-    let previous = match vfs::read_to_string(&schema_path) {
-        Ok(text) => match serde_json::from_str::<ClassSchema>(&text) {
-            Ok(schema) => Some(schema),
-            Err(e) => {
-                return vec![diagnostic(
-                    &class,
-                    &schema_path,
-                    format!("`{SCHEMA_FILE}` is not valid: {e}"),
-                )]
-            }
-        },
-        Err(_) => None,
+    let previous = match read_schema(&class, &schema_path) {
+        Ok(schema) => schema,
+        Err(problem) => return vec![problem],
     };
 
     let compiled = compile_class(
@@ -100,25 +125,12 @@ pub fn compile_class_dir(
         },
         natives,
     );
-    let mut problems: Vec<CompileDiagnostic> = compiled
-        .diagnostics
-        .iter()
-        .map(|d| CompileDiagnostic {
-            severity: match d.severity {
-                Severity::Error => DiagnosticSeverity::Error,
-                Severity::Warning => DiagnosticSeverity::Warning,
-            },
-            class: Some(class.clone()),
-            file: Some(file.clone()),
-            location: d.location(),
-            message: d.message.clone(),
-        })
-        .collect();
+    let mut problems = problems_of(&class, &file, &compiled.diagnostics);
 
     let Some(module) = compiled.module else {
         if write {
             // Never leave a module from an older source behind (only our
-            // own: `check_language` refused another language's).
+            // own: the class is ours, the host handed it to us).
             store.remove(&entry.id);
         }
         return problems;
@@ -201,7 +213,7 @@ pub fn validate_project_classes(root: &Path, natives: &NativeRegistry) -> Result
 }
 
 /// `Pulsar/types/pulsar.d.ts`, when it differs from what the registry says.
-fn write_declarations(root: &Path, natives: &NativeRegistry) {
+pub(crate) fn write_declarations(root: &Path, natives: &NativeRegistry) {
     let text = pulsar_script_ts::declarations(natives);
     let path = root.join("Pulsar").join("types").join("pulsar.d.ts");
     if vfs::read_to_string(&path).is_ok_and(|existing| existing == text) {

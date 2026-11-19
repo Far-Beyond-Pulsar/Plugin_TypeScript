@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use plugin_editor_api::{linked_script_languages, NativeRegistry, ScriptLanguage};
+use plugin_editor_api::{NativeRegistry, ScriptLanguage};
 use plugin_typescript::{
     compile_project_classes, validate_project_classes, TypeScriptLanguage, CLASS_FILE, SCHEMA_FILE,
 };
@@ -10,6 +10,9 @@ use pulsar_script_vm::Module;
 
 use plugin_typescript as _;
 use pulsar_script_math as _;
+
+// A second language, for the one-language rule: it has only a class marker.
+pulsar_language::submit_test_language!("test.other", ["graph_save.json"]);
 
 const DOOR: &str = r#"
 export default class Door extends ScriptClass {
@@ -129,44 +132,48 @@ fn errors_carry_the_class_file_and_position_and_leave_no_stale_module() {
 }
 
 #[test]
-fn a_class_has_one_language() {
-    // Both sources present.
+fn a_class_another_language_owns_is_not_compiled_and_its_artifacts_survive() {
+    // The host decides ownership (`pulsar_class::is_owned_by`) from the markers
+    // the registered languages declare; this plugin names none but its own.
+    // Both languages' sources present: neither compiles it.
     let dir = project(&[
         ("src/classes/Door/class.ts", DOOR),
         ("src/classes/Door/graph_save.json", "{}"),
     ]);
-    let problems = compile_project_classes(dir.path(), &natives());
-    assert!(
-        problems
-            .iter()
-            .any(|p| p.message.contains("a class has one language")),
-        "{problems:#?}"
-    );
+    assert!(compile_project_classes(dir.path(), &natives()).is_empty());
+    assert!(validate_project_classes(dir.path(), &natives()).is_ok());
     assert!(!module_path(dir.path(), "Door").exists());
+    assert_eq!(
+        pulsar_class::class_problems(dir.path()).len(),
+        1,
+        "the host reports it"
+    );
 
-    // A module another language wrote is not overwritten.
+    // A module another language wrote is not overwritten or removed.
     let dir = project(&[("src/classes/Door/class.ts", DOOR)]);
     let (entry, store) =
         pulsar_class::ModuleStore::for_class_dir(&dir.path().join("src/classes/Door")).unwrap();
     store
         .write(
             &entry,
-            "blueprint",
+            "test.other",
             String::new(),
-            b"{\"from\":\"blueprint\"}",
+            b"{\"from\":\"other\"}",
         )
         .unwrap();
-    let problems = compile_project_classes(dir.path(), &natives());
-    assert!(
-        problems
-            .iter()
-            .any(|p| p.message.contains("`blueprint` language")),
-        "{problems:#?}"
-    );
+    assert!(compile_project_classes(dir.path(), &natives()).is_empty());
     assert_eq!(
         std::fs::read_to_string(module_path(dir.path(), "Door")).unwrap(),
-        "{\"from\":\"blueprint\"}",
-        "the other language's artifact survives the refusal"
+        "{\"from\":\"other\"}",
+        "the other language's artifact survives"
+    );
+    assert!(
+        matches!(
+            &pulsar_class::class_problems(dir.path())[..],
+            [pulsar_class::ClassProblem::ModuleFromOtherLanguage { module_language, .. }]
+                if module_language == "test.other"
+        ),
+        "the host reports it"
     );
 }
 
@@ -207,10 +214,15 @@ fn projects_without_typescript_compile_nothing_and_write_nothing() {
 
 #[test]
 fn the_language_is_discoverable_without_naming_the_crate() {
-    let languages = linked_script_languages();
-    let typescript = languages
-        .iter()
-        .find(|l| l.id() == "typescript")
-        .expect("registered at link time");
-    assert_eq!(typescript.display_name(), "TypeScript");
+    let registry = pulsar_language::LanguageRegistry::current();
+    let typescript = registry.by_id("typescript").expect("registered by the plugin's build");
+    assert_eq!(typescript.display_name, "TypeScript");
+    assert!(typescript.compiler.is_some());
+    assert_eq!(
+        registry.for_path(Path::new("src/classes/Door/class.ts")).map(|l| l.id),
+        Some("typescript")
+    );
+    assert!(!registry.is_class_dir(Path::new("does-not-matter")));
+    let dir = project(&[("src/classes/Door/class.ts", DOOR)]);
+    assert!(registry.is_class_dir(&dir.path().join("src/classes/Door")));
 }
