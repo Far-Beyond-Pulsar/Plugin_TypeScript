@@ -16,9 +16,12 @@ use oxc_ast::ast::{
 };
 use oxc_parser::Parser;
 use oxc_span::{GetSpan, SourceType, Span};
+use pulsar_script_vm::module_builder::{
+    binary_result, BuildError, FunctionBuilder, FunctionHandle, Local, ModuleBuilder,
+};
 use pulsar_script_vm::{
-    verify, BinOp, Constant, DebugInfo, Function as VmFunction, Import, Instr, Module,
-    NativeRegistry, Param, Reg, SourceLoc, Type, TypeRegistry, UnOp, Variable,
+    BinOp, Constant, Instr, Module, NativeRegistry, Param, Reg, SourceLoc, Type, TypeRegistry,
+    UnOp,
 };
 
 use crate::declarations::callable;
@@ -82,47 +85,26 @@ pub fn compile_class(src: &ClassSource<'_>, natives: &NativeRegistry) -> Compile
 
 #[derive(Clone)]
 struct MethodSig {
-    index: u32,
+    handle: FunctionHandle,
     params: Vec<Type>,
     ret: Type,
     is_async: bool,
 }
 
-#[derive(Clone)]
-struct Local {
-    reg: Reg,
-    ty: Type,
-    mutable: bool,
-}
-
-#[derive(Default)]
-struct LoopCtx {
-    breaks: Vec<usize>,
-    continues: Vec<usize>,
-}
-
-/// The function being lowered.
+/// The function being lowered: the builder's function, and what only a
+/// TypeScript method has.
 struct Fx {
-    regs: Vec<Type>,
-    code: Vec<Instr>,
-    debug: DebugInfo,
-    scopes: Vec<HashMap<String, Local>>,
-    loops: Vec<LoopCtx>,
-    ret: Type,
+    b: FunctionBuilder,
     is_async: bool,
-    loc: Option<SourceLoc>,
 }
 
 struct Cx<'a> {
     src: &'a ClassSource<'a>,
-    natives: &'a NativeRegistry,
     lines: LineIndex,
     diagnostics: Vec<Diagnostic>,
-    fields: HashMap<String, (u32, Type)>,
+    /// The module under construction: constants, imports, variables, functions.
+    modb: ModuleBuilder<'a>,
     methods: HashMap<String, MethodSig>,
-    constants: Vec<Constant>,
-    imports: Vec<Import>,
-    import_index: HashMap<String, u32>,
 }
 
 type Val = (Reg, Type);
@@ -131,14 +113,10 @@ impl<'a> Cx<'a> {
     fn new(src: &'a ClassSource<'a>, natives: &'a NativeRegistry, lines: LineIndex) -> Self {
         Self {
             src,
-            natives,
             lines,
             diagnostics: Vec::new(),
-            fields: HashMap::new(),
+            modb: ModuleBuilder::new(src.class_name, natives),
             methods: HashMap::new(),
-            constants: Vec::new(),
-            imports: Vec::new(),
-            import_index: HashMap::new(),
         }
     }
 
@@ -150,6 +128,29 @@ impl<'a> Cx<'a> {
 
     fn unsupported(&mut self, span: Span, what: &str) {
         self.err(span, format!("{what} is not supported in script classes"));
+    }
+
+    /// A problem the builder found with the module (not with the source at one
+    /// position).
+    fn builder_error(&mut self, error: BuildError) {
+        let message = match error {
+            BuildError::TooManyRegisters => {
+                "the method needs too many registers: split it up".to_owned()
+            }
+            other => format!("internal error: {other}"),
+        };
+        self.diagnostics.push(Diagnostic::error(message, 0, 0));
+    }
+
+    /// The value of a builder call, or the problem recorded.
+    fn built<T>(&mut self, result: Result<T, BuildError>) -> Option<T> {
+        match result {
+            Ok(value) => Some(value),
+            Err(error) => {
+                self.builder_error(error);
+                None
+            }
+        }
     }
 
     // ---- finding the class ---------------------------------------------------
@@ -240,7 +241,6 @@ impl<'a> Cx<'a> {
                     return None;
                 };
                 let name = name.name.as_str();
-                let types = TypeRegistry::global();
                 match name {
                     "int" => Some(Type::Int),
                     "float" => Some(Type::Float),
@@ -265,14 +265,13 @@ impl<'a> Cx<'a> {
                         }
                         Some(Type::map(key, self.resolve_type(value)?))
                     }
-                    _ if types.component(name).is_some() => Some(Type::Component(name.to_owned())),
-                    _ if types.value_types().any(|v| v == name) => {
-                        Some(Type::Object(name.to_owned()))
-                    }
-                    _ => {
-                        self.err(span, format!("unknown type `{name}`"));
-                        None
-                    }
+                    _ => match self.modb.engine_type(name) {
+                        Some(ty) => Some(ty),
+                        None => {
+                            self.err(span, format!("unknown type `{name}`"));
+                            None
+                        }
+                    },
                 }
             }
             _ => {
@@ -291,29 +290,7 @@ impl<'a> Cx<'a> {
             .and_then(|a| self.resolve_type(&a.type_annotation))
     }
 
-    // ---- constants and imports -----------------------------------------------
-
-    fn konst(&mut self, constant: Constant) -> u32 {
-        if let Some(i) = self.constants.iter().position(|c| *c == constant) {
-            return i as u32;
-        }
-        self.constants.push(constant);
-        (self.constants.len() - 1) as u32
-    }
-
-    fn import(&mut self, name: &str) -> Option<u32> {
-        if let Some(&i) = self.import_index.get(name) {
-            return Some(i);
-        }
-        let native = self.natives.get(name)?;
-        self.imports.push(Import {
-            name: name.to_owned(),
-            sig: native.sig.clone(),
-        });
-        let index = (self.imports.len() - 1) as u32;
-        self.import_index.insert(name.to_owned(), index);
-        Some(index)
-    }
+    // ---- natives -----------------------------------------------------------
 
     /// The native for `namespace.member`, accepting the sanitized spelling
     /// (`string_`, `new_`) the generated declarations use.
@@ -331,7 +308,7 @@ impl<'a> Cx<'a> {
         };
         for ns in candidates(namespace) {
             for name in candidates(member) {
-                if let Some(native) = self.natives.get(&format!("{ns}::{name}")) {
+                if let Some(native) = self.modb.native(&format!("{ns}::{name}")) {
                     if callable(native) {
                         return Some(std::sync::Arc::clone(native));
                     }
@@ -388,8 +365,6 @@ impl<'a> Cx<'a> {
                         ty: ty.to_string(),
                         renamed_from,
                     });
-                    self.fields
-                        .insert(name.clone(), (variables.len() as u32, ty.clone()));
                     variables.push((name, ty, default));
                 }
             }
@@ -403,9 +378,18 @@ impl<'a> Cx<'a> {
                 None
             }
         };
+        // The fields are the module's variables; a field keeps the id its schema gave it.
+        for (name, ty, default) in variables {
+            let id = schema
+                .as_ref()
+                .and_then(|schema| schema.id_of(&name))
+                .map(str::to_owned);
+            let added = self.modb.add_variable(name, ty, default, id);
+            self.built(added);
+        }
 
         // Method signatures first, so calls can refer to methods declared later.
-        let mut methods: Vec<(&Function<'_>, String, bool)> = Vec::new();
+        let mut methods: Vec<(&Function<'_>, String)> = Vec::new();
         for element in &class.body.body {
             match element {
                 ClassElement::MethodDefinition(method) => {
@@ -437,9 +421,20 @@ impl<'a> Cx<'a> {
                         self.err(method.span, format!("method `{name}` is declared twice"));
                         continue;
                     }
-                    if let Some(sig) = self.method_sig(&method.value, methods.len() as u32) {
-                        self.methods.insert(name.clone(), sig);
-                        methods.push((&method.value, name, exported));
+                    if let Some((params, ret, is_async)) = self.method_sig(&method.value) {
+                        let declared =
+                            self.modb
+                                .declare_function(&name, params.clone(), ret.clone(), exported);
+                        if let Some(handle) = self.built(declared) {
+                            let sig = MethodSig {
+                                handle,
+                                params,
+                                ret,
+                                is_async,
+                            };
+                            self.methods.insert(name.clone(), sig);
+                            methods.push((&method.value, name));
+                        }
                     }
                 }
                 ClassElement::PropertyDefinition(_) => {}
@@ -452,12 +447,9 @@ impl<'a> Cx<'a> {
         self.check_lifecycle();
 
         // Lower each method.
-        let mut functions = Vec::new();
-        for (function, name, exported) in &methods {
+        for (function, name) in &methods {
             let sig = self.methods[name].clone();
-            if let Some(lowered) = self.lower_method(function, name, *exported, &sig) {
-                functions.push(lowered);
-            }
+            self.lower_method(function, name, &sig);
         }
 
         if self.diagnostics.iter().any(Diagnostic::is_error) {
@@ -468,36 +460,23 @@ impl<'a> Cx<'a> {
             };
         }
         let schema = schema.expect("reconciled when there are no errors");
-        let mut module = Module::new(class_name);
-        module.class_version = schema.version;
-        module.constants = std::mem::take(&mut self.constants);
-        module.imports = std::mem::take(&mut self.imports);
-        module.variables = variables
-            .into_iter()
-            .map(|(name, ty, default)| Variable {
-                id: schema.id_of(&name).map(str::to_owned),
-                name,
-                ty,
-                default,
-            })
-            .collect();
-        module.functions = functions;
-        if let Err(error) = verify(&module) {
-            self.diagnostics.push(Diagnostic::error(
-                format!("internal error: the compiled module does not verify: {error}"),
-                0,
-                0,
-            ));
-            return Compiled {
-                module: None,
+        self.modb.set_class_version(schema.version);
+        let module: Result<Module, BuildError> = self.modb.finish();
+        match module {
+            Ok(module) => Compiled {
+                module: Some(module),
                 diagnostics: self.diagnostics,
                 schema: Some(schema),
-            };
-        }
-        Compiled {
-            module: Some(module),
-            diagnostics: self.diagnostics,
-            schema: Some(schema),
+            },
+            Err(error) => {
+                self.diagnostics
+                    .push(Diagnostic::error(format!("internal error: {error}"), 0, 0));
+                Compiled {
+                    module: None,
+                    diagnostics: self.diagnostics,
+                    schema: Some(schema),
+                }
+            }
         }
     }
 
@@ -588,7 +567,8 @@ impl<'a> Cx<'a> {
         Some((name, ty, default, renamed_from))
     }
 
-    fn method_sig(&mut self, function: &Function<'_>, index: u32) -> Option<MethodSig> {
+    /// A method's parameter types, return type and whether it is async.
+    fn method_sig(&mut self, function: &Function<'_>) -> Option<(Vec<Type>, Type, bool)> {
         if function.generator || function.type_parameters.is_some() || function.this_param.is_some()
         {
             self.unsupported(function.span, "generators, generics and `this` parameters");
@@ -636,12 +616,7 @@ impl<'a> Cx<'a> {
             self.err(function.span, "an async method returns `Promise<void>`");
             ok = false;
         }
-        ok.then_some(MethodSig {
-            index,
-            params,
-            ret,
-            is_async: function.r#async,
-        })
+        ok.then_some((params, ret, function.r#async))
     }
 
     fn param(&mut self, parameter: &FormalParameter<'_>) -> Option<(String, Type)> {
@@ -753,40 +728,21 @@ impl<'a> Cx<'a> {
 
     // ---- methods ---------------------------------------------------------------------
 
-    fn lower_method(
-        &mut self,
-        function: &Function<'_>,
-        name: &str,
-        exported: bool,
-        sig: &MethodSig,
-    ) -> Option<VmFunction> {
+    fn lower_method(&mut self, function: &Function<'_>, name: &str, sig: &MethodSig) {
         let Some(body) = &function.body else {
             self.err(function.span, format!("method `{name}` has no body"));
-            return None;
+            return;
         };
         let mut f = Fx {
-            regs: Vec::new(),
-            code: Vec::new(),
-            debug: DebugInfo::default(),
-            scopes: vec![HashMap::new()],
-            loops: Vec::new(),
-            ret: sig.ret.clone(),
+            b: self.modb.begin_function(sig.handle),
             is_async: sig.is_async,
-            loc: None,
         };
-        for (parameter, ty) in function.params.items.iter().zip(&sig.params) {
+        for (index, (parameter, ty)) in function.params.items.iter().zip(&sig.params).enumerate() {
             let BindingPattern::BindingIdentifier(id) = &parameter.pattern else {
                 continue;
             };
-            let reg = self.new_reg(&mut f, ty.clone());
-            f.scopes[0].insert(
-                id.name.as_str().to_owned(),
-                Local {
-                    reg,
-                    ty: ty.clone(),
-                    mutable: true,
-                },
-            );
+            let reg = f.b.param_reg(index);
+            f.b.bind_local(id.name.as_str().to_owned(), reg, ty.clone(), true);
         }
         for statement in &body.statements {
             self.statement(&mut f, statement);
@@ -803,77 +759,44 @@ impl<'a> Cx<'a> {
             );
         } else {
             // Every path returns, so this is never reached.
-            let here = Self::here(&f);
-            self.emit(&mut f, Instr::Jump { target: here });
+            f.b.unreachable();
         }
-        Some(VmFunction {
-            name: name.to_owned(),
-            exported,
-            params: sig.params.clone(),
-            ret: sig.ret.clone(),
-            registers: f.regs,
-            code: f.code,
-            debug: (!f.debug.ranges.is_empty()).then_some(f.debug),
-        })
+        // A method that already has errors is half lowered: its labels and
+        // jumps are not worth a second complaint.
+        if let Err(error) = self.modb.finish_function(sig.handle, f.b) {
+            if !self.diagnostics.iter().any(Diagnostic::is_error) {
+                self.builder_error(error);
+            }
+        }
     }
 
     fn new_reg(&mut self, f: &mut Fx, ty: Type) -> Reg {
-        if f.regs.len() >= usize::from(Reg::MAX) {
-            self.diagnostics.push(Diagnostic::error(
-                "the method needs too many registers: split it up",
-                0,
-                0,
-            ));
-            return 0;
+        match f.b.new_reg(ty) {
+            Ok(reg) => reg,
+            Err(error) => {
+                self.builder_error(error);
+                0
+            }
         }
-        f.regs.push(ty);
-        (f.regs.len() - 1) as Reg
     }
 
     fn at(&mut self, f: &mut Fx, span: Span) {
         let (line, column) = self.lines.position(self.src.source, span.start);
-        f.loc = Some(SourceLoc {
-            file: self.src.file.to_owned(),
-            node: String::new(),
-            line: Some(line),
-            column: Some(column),
-        });
+        f.b.set_loc(SourceLoc::at(self.src.file, line, column));
     }
 
     fn emit(&mut self, f: &mut Fx, instr: Instr) -> usize {
-        let pc = f.code.len();
-        if let Some(loc) = &f.loc {
-            f.debug.record(pc as u32, loc);
-        }
-        f.code.push(instr);
-        pc
+        f.b.emit(instr)
     }
 
-    fn here(f: &Fx) -> u32 {
-        f.code.len() as u32
+    fn load_var(&mut self, f: &mut Fx, var: u32) -> Reg {
+        let loaded = self.modb.load_var(&mut f.b, var);
+        self.built(loaded).unwrap_or(0)
     }
 
-    fn patch(f: &mut Fx, at: usize, target: u32) {
-        match &mut f.code[at] {
-            Instr::Jump { target: t } => *t = target,
-            other => unreachable!("patching {other:?}"),
-        }
-    }
-
-    fn patch_branch(f: &mut Fx, at: usize, then: Option<u32>, otherwise: Option<u32>) {
-        if let Instr::Branch {
-            then: t,
-            otherwise: o,
-            ..
-        } = &mut f.code[at]
-        {
-            if let Some(then) = then {
-                *t = then;
-            }
-            if let Some(otherwise) = otherwise {
-                *o = otherwise;
-            }
-        }
+    fn store_var(&mut self, f: &mut Fx, var: u32, src: Reg) {
+        let stored = self.modb.store_var(&mut f.b, var, src);
+        self.built(stored);
     }
 
     // ---- statements ----------------------------------------------------------------------
@@ -883,11 +806,11 @@ impl<'a> Cx<'a> {
         match statement {
             Statement::EmptyStatement(_) => {}
             Statement::BlockStatement(block) => {
-                f.scopes.push(HashMap::new());
+                f.b.push_scope();
                 for s in &block.body {
                     self.statement(f, s);
                 }
-                f.scopes.pop();
+                f.b.pop_scope();
             }
             Statement::ExpressionStatement(e) => {
                 self.expression(f, &e.expression, None, true);
@@ -897,56 +820,39 @@ impl<'a> Cx<'a> {
                 let Some(cond) = self.boolean(f, &s.test) else {
                     return;
                 };
-                let branch = self.emit(
-                    f,
-                    Instr::Branch {
-                        cond,
-                        then: 0,
-                        otherwise: 0,
-                    },
-                );
-                Self::patch_branch(f, branch, Some(Self::here(f)), None);
+                let (then, otherwise) = (f.b.new_label(), f.b.new_label());
+                f.b.branch(cond, then, otherwise);
+                f.b.bind(then);
                 self.scoped(f, &s.consequent);
                 match &s.alternate {
                     Some(alternate) => {
-                        let over = self.emit(f, Instr::Jump { target: 0 });
-                        Self::patch_branch(f, branch, None, Some(Self::here(f)));
+                        let end = f.b.new_label();
+                        f.b.jump(end);
+                        f.b.bind(otherwise);
                         self.scoped(f, alternate);
-                        Self::patch(f, over, Self::here(f));
+                        f.b.bind(end);
                     }
-                    None => Self::patch_branch(f, branch, None, Some(Self::here(f))),
+                    None => {
+                        f.b.bind(otherwise);
+                    }
                 }
             }
             Statement::WhileStatement(s) => {
-                let top = Self::here(f);
+                let top = f.b.label_here();
                 let Some(cond) = self.boolean(f, &s.test) else {
                     return;
                 };
-                let branch = self.emit(
-                    f,
-                    Instr::Branch {
-                        cond,
-                        then: 0,
-                        otherwise: 0,
-                    },
-                );
-                Self::patch_branch(f, branch, Some(Self::here(f)), None);
-                f.loops.push(LoopCtx::default());
+                let (body, end) = (f.b.new_label(), f.b.new_label());
+                f.b.branch(cond, body, end);
+                f.b.bind(body);
+                f.b.enter_loop(end, top);
                 self.scoped(f, &s.body);
-                let ctx = f.loops.pop().expect("pushed above");
-                let back = self.emit(f, Instr::Jump { target: top });
-                let _ = back;
-                let end = Self::here(f);
-                Self::patch_branch(f, branch, None, Some(end));
-                for at in ctx.breaks {
-                    Self::patch(f, at, end);
-                }
-                for at in ctx.continues {
-                    Self::patch(f, at, top);
-                }
+                f.b.exit_loop();
+                f.b.jump(top);
+                f.b.bind(end);
             }
             Statement::ForStatement(s) => {
-                f.scopes.push(HashMap::new());
+                f.b.push_scope();
                 match &s.init {
                     Some(ForStatementInit::VariableDeclaration(d)) => self.declaration(f, d),
                     Some(init) => {
@@ -956,72 +862,48 @@ impl<'a> Cx<'a> {
                     }
                     None => {}
                 }
-                let top = Self::here(f);
-                let branch = match &s.test {
-                    Some(test) => {
-                        let Some(cond) = self.boolean(f, test) else {
-                            f.scopes.pop();
-                            return;
-                        };
-                        let at = self.emit(
-                            f,
-                            Instr::Branch {
-                                cond,
-                                then: 0,
-                                otherwise: 0,
-                            },
-                        );
-                        Self::patch_branch(f, at, Some(Self::here(f)), None);
-                        Some(at)
-                    }
-                    None => None,
-                };
-                f.loops.push(LoopCtx::default());
+                let top = f.b.label_here();
+                let (end, update) = (f.b.new_label(), f.b.new_label());
+                if let Some(test) = &s.test {
+                    let Some(cond) = self.boolean(f, test) else {
+                        f.b.pop_scope();
+                        return;
+                    };
+                    let body = f.b.new_label();
+                    f.b.branch(cond, body, end);
+                    f.b.bind(body);
+                }
+                f.b.enter_loop(end, update);
                 self.scoped(f, &s.body);
-                let ctx = f.loops.pop().expect("pushed above");
-                let update = Self::here(f);
+                f.b.exit_loop();
+                f.b.bind(update);
                 if let Some(update_expr) = &s.update {
                     self.at(f, update_expr.span());
                     self.expression(f, update_expr, None, true);
                 }
-                self.emit(f, Instr::Jump { target: top });
-                let end = Self::here(f);
-                if let Some(at) = branch {
-                    Self::patch_branch(f, at, None, Some(end));
-                }
-                for at in ctx.breaks {
-                    Self::patch(f, at, end);
-                }
-                for at in ctx.continues {
-                    Self::patch(f, at, update);
-                }
-                f.scopes.pop();
+                f.b.jump(top);
+                f.b.bind(end);
+                f.b.pop_scope();
             }
             Statement::BreakStatement(s) => {
                 if s.label.is_some() {
                     self.unsupported(s.span, "labels");
                     return;
                 }
-                if f.loops.is_empty() {
+                if f.b.break_jump().is_err() {
                     self.err(s.span, "`break` outside a loop");
-                    return;
                 }
-                let at = self.emit(f, Instr::Jump { target: 0 });
-                f.loops.last_mut().expect("checked").breaks.push(at);
             }
             Statement::ContinueStatement(s) => {
                 if s.label.is_some() {
                     self.unsupported(s.span, "labels");
                     return;
                 }
-                if f.loops.is_empty() {
+                if f.b.continue_jump().is_err() {
                     self.err(s.span, "`continue` outside a loop");
-                    return;
                 }
-                let at = self.emit(f, Instr::Jump { target: 0 });
-                f.loops.last_mut().expect("checked").continues.push(at);
             }
-            Statement::ReturnStatement(s) => match (&s.argument, f.ret.clone()) {
+            Statement::ReturnStatement(s) => match (&s.argument, f.b.return_type().clone()) {
                 (None, Type::Unit) => {
                     self.emit(f, Instr::Return { value: None });
                 }
@@ -1057,9 +939,9 @@ impl<'a> Cx<'a> {
     }
 
     fn scoped(&mut self, f: &mut Fx, statement: &Statement<'_>) {
-        f.scopes.push(HashMap::new());
+        f.b.push_scope();
         self.statement(f, statement);
-        f.scopes.pop();
+        f.b.pop_scope();
     }
 
     fn declaration(&mut self, f: &mut Fx, declaration: &oxc_ast::ast::VariableDeclaration<'_>) {
@@ -1080,7 +962,7 @@ impl<'a> Cx<'a> {
                 continue;
             }
             let name = id.name.as_str().to_owned();
-            if f.scopes.last().is_some_and(|s| s.contains_key(&name)) {
+            if f.b.declared_in_scope(&name) {
                 self.err(
                     id.span,
                     format!("`{name}` is already declared in this scope"),
@@ -1123,13 +1005,11 @@ impl<'a> Cx<'a> {
                     continue;
                 }
             };
-            f.scopes.last_mut().expect("a scope").insert(
+            f.b.bind_local(
                 name,
-                Local {
-                    reg,
-                    ty,
-                    mutable: declaration.kind != VariableDeclarationKind::Const,
-                },
+                reg,
+                ty,
+                declaration.kind != VariableDeclarationKind::Const,
             );
         }
     }
@@ -1228,10 +1108,11 @@ impl<'a> Cx<'a> {
     }
 
     fn constant(&mut self, f: &mut Fx, constant: Constant, ty: Type) -> Val {
-        let index = self.konst(constant);
-        let dst = self.new_reg(f, ty.clone());
-        self.emit(f, Instr::Const { dst, index });
-        (dst, ty)
+        let loaded = self.modb.load_constant(&mut f.b, constant);
+        match self.built(loaded) {
+            Some(value) => value,
+            None => (0, ty),
+        }
     }
 
     /// `this.name` read, or a getter native on a value or component.
@@ -1242,9 +1123,8 @@ impl<'a> Cx<'a> {
     ) -> Option<Val> {
         let name = member.property.name.as_str();
         if matches!(member.object, Expression::ThisExpression(_)) {
-            if let Some((var, ty)) = self.fields.get(name).cloned() {
-                let dst = self.new_reg(f, ty.clone());
-                self.emit(f, Instr::LoadVar { dst, var });
+            if let Some((var, ty)) = self.modb.variable(name).map(|(v, t)| (v, t.clone())) {
+                let dst = self.load_var(f, var);
                 return Some((dst, ty));
             }
             return match name {
@@ -1292,17 +1172,9 @@ impl<'a> Cx<'a> {
             );
             return None;
         };
-        let import = self.import(&native.name)?;
         let ret = native.sig.ret.clone();
-        let dst = self.new_reg(f, ret.clone());
-        self.emit(
-            f,
-            Instr::CallNative {
-                import,
-                args: vec![receiver],
-                dst: Some(dst),
-            },
-        );
+        let called = self.modb.call_native(&mut f.b, &native.name, &[receiver]);
+        let dst = self.built(called)?.unwrap_or(0);
         Some((dst, ret))
     }
 
@@ -1415,15 +1287,8 @@ impl<'a> Cx<'a> {
             return None;
         }
         let regs = self.arguments(f, span, name, &sig.params, args)?;
-        let dst = (sig.ret != Type::Unit).then(|| self.new_reg(f, sig.ret.clone()));
-        self.emit(
-            f,
-            Instr::Call {
-                func: sig.index,
-                args: regs,
-                dst,
-            },
-        );
+        let called = self.modb.call(&mut f.b, sig.handle, &regs);
+        let dst = self.built(called)?;
         Some((dst.unwrap_or(0), sig.ret))
     }
 
@@ -1495,17 +1360,9 @@ impl<'a> Cx<'a> {
         let types: Vec<Type> = params.iter().map(|p| p.ty.clone()).collect();
         let rest = self.arguments(f, span, &native.name, &types, args)?;
         regs.extend(rest);
-        let import = self.import(&native.name)?;
         let ret = native.sig.ret.clone();
-        let dst = (ret != Type::Unit).then(|| self.new_reg(f, ret.clone()));
-        self.emit(
-            f,
-            Instr::CallNative {
-                import,
-                args: regs,
-                dst,
-            },
-        );
+        let called = self.modb.call_native(&mut f.b, &native.name, &regs);
+        let dst = self.built(called)?;
         Some((dst.unwrap_or(0), ret))
     }
 
@@ -1538,7 +1395,7 @@ impl<'a> Cx<'a> {
                 }
                 let regs = self.arguments(f, call.span, "wait", &[Type::Float], &args)?;
                 self.at(f, a.span);
-                self.emit(f, Instr::Wait { seconds: regs[0] });
+                f.b.wait(regs[0]);
                 Some((0, Type::Unit))
             }
             Expression::StaticMemberExpression(member)
@@ -1696,42 +1553,20 @@ impl<'a> Cx<'a> {
             return None;
         }
         let ty = left.1.clone();
-        let result = match op {
-            BinOp::Add if matches!(ty, Type::Int | Type::Float | Type::Str) => ty.clone(),
-            BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem if ty.is_numeric() => ty.clone(),
-            BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge
-                if matches!(ty, Type::Int | Type::Float | Type::Str) =>
-            {
-                Type::Bool
-            }
-            BinOp::Eq | BinOp::Ne
-                if matches!(
-                    ty,
-                    Type::Int
-                        | Type::Float
-                        | Type::Str
-                        | Type::Bool
-                        | Type::Entity
-                        | Type::Component(_)
-                ) || pulsar_script_vm::TypeRegistry::global().supports_eq(&ty) =>
-            {
-                Type::Bool
-            }
-            _ => {
-                self.err(
-                    span,
-                    format!(
-                        "this operator does not apply to `{}`{}",
-                        crate::declarations::ts_type(&ty),
-                        if matches!(ty, Type::Object(_)) {
-                            ": use the type's methods (`a.add(b)`, `a.eq(b)`)"
-                        } else {
-                            ""
-                        }
-                    ),
-                );
-                return None;
-            }
+        let Some(result) = binary_result(op, &ty) else {
+            self.err(
+                span,
+                format!(
+                    "this operator does not apply to `{}`{}",
+                    crate::declarations::ts_type(&ty),
+                    if matches!(ty, Type::Object(_)) {
+                        ": use the type's methods (`a.add(b)`, `a.eq(b)`)"
+                    } else {
+                        ""
+                    }
+                ),
+            );
+            return None;
         };
         let dst = self.new_reg(f, result.clone());
         self.emit(
@@ -1760,16 +1595,13 @@ impl<'a> Cx<'a> {
                 src: left,
             },
         );
-        let branch = self.emit(
-            f,
-            Instr::Branch {
-                cond: left,
-                then: 0,
-                otherwise: 0,
-            },
-        );
         // `&&` evaluates the right side when the left is true, `||` when false.
-        let right_start = Self::here(f);
+        let (right_start, end) = (f.b.new_label(), f.b.new_label());
+        match l.operator {
+            LogicalOperator::And => f.b.branch(left, right_start, end),
+            _ => f.b.branch(left, end, right_start),
+        };
+        f.b.bind(right_start);
         let right = self.boolean(f, &l.right)?;
         self.emit(
             f,
@@ -1778,11 +1610,7 @@ impl<'a> Cx<'a> {
                 src: right,
             },
         );
-        let end = Self::here(f);
-        match l.operator {
-            LogicalOperator::And => Self::patch_branch(f, branch, Some(right_start), Some(end)),
-            _ => Self::patch_branch(f, branch, Some(end), Some(right_start)),
-        }
+        f.b.bind(end);
         Some((result, Type::Bool))
     }
 
@@ -1793,15 +1621,9 @@ impl<'a> Cx<'a> {
         expected: Option<&Type>,
     ) -> Option<Val> {
         let cond = self.boolean(f, &c.test)?;
-        let branch = self.emit(
-            f,
-            Instr::Branch {
-                cond,
-                then: 0,
-                otherwise: 0,
-            },
-        );
-        Self::patch_branch(f, branch, Some(Self::here(f)), None);
+        let (then, otherwise, end) = (f.b.new_label(), f.b.new_label(), f.b.new_label());
+        f.b.branch(cond, then, otherwise);
+        f.b.bind(then);
         let (a, ty) = self.expression(f, &c.consequent, expected, false)?;
         let result = self.new_reg(f, ty.clone());
         self.emit(
@@ -1811,8 +1633,8 @@ impl<'a> Cx<'a> {
                 src: a,
             },
         );
-        let over = self.emit(f, Instr::Jump { target: 0 });
-        Self::patch_branch(f, branch, None, Some(Self::here(f)));
+        f.b.jump(end);
+        f.b.bind(otherwise);
         let (b, other) = self.expression(f, &c.alternate, Some(&ty), false)?;
         if other != ty {
             self.mismatch(c.alternate.span(), &ty, &other);
@@ -1825,7 +1647,7 @@ impl<'a> Cx<'a> {
                 src: b,
             },
         );
-        Self::patch(f, over, Self::here(f));
+        f.b.bind(end);
         Some((result, ty))
     }
 
@@ -1966,8 +1788,8 @@ impl<'a> Cx<'a> {
                 if matches!(member.object, Expression::ThisExpression(_)) =>
             {
                 let name = member.property.name.as_str();
-                match self.fields.get(name) {
-                    Some((var, ty)) => Some(Target::Field(*var, ty.clone())),
+                match self.modb.variable(name) {
+                    Some((var, ty)) => Some(Target::Field(var, ty.clone())),
                     None => {
                         self.err(member.span, format!("the class has no field `{name}`"));
                         None
@@ -1988,11 +1810,7 @@ impl<'a> Cx<'a> {
     fn read_target(&mut self, f: &mut Fx, target: &Target) -> Val {
         match target {
             Target::Local(reg, ty) => (*reg, ty.clone()),
-            Target::Field(var, ty) => {
-                let dst = self.new_reg(f, ty.clone());
-                self.emit(f, Instr::LoadVar { dst, var: *var });
-                (dst, ty.clone())
-            }
+            Target::Field(var, ty) => (self.load_var(f, *var), ty.clone()),
         }
     }
 
@@ -2003,9 +1821,7 @@ impl<'a> Cx<'a> {
                     self.emit(f, Instr::Move { dst: *reg, src });
                 }
             }
-            Target::Field(var, _) => {
-                self.emit(f, Instr::StoreVar { var: *var, src });
-            }
+            Target::Field(var, _) => self.store_var(f, *var, src),
         }
     }
 }
@@ -2024,7 +1840,7 @@ impl Target {
 }
 
 fn lookup(f: &Fx, name: &str) -> Option<Local> {
-    f.scopes.iter().rev().find_map(|s| s.get(name)).cloned()
+    f.b.lookup(name).cloned()
 }
 
 fn is_number_literal(e: &Expression<'_>) -> bool {

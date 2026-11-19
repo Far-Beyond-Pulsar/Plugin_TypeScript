@@ -1,0 +1,904 @@
+{
+  "format_version": 5,
+  "name": "Counter",
+  "constants": [
+    {
+      "Int": 0
+    },
+    {
+      "Int": 1
+    },
+    {
+      "Int": 2
+    },
+    {
+      "Float": 0.0
+    }
+  ],
+  "imports": [],
+  "variables": [
+    {
+      "name": "total",
+      "ty": {
+        "kind": "int"
+      },
+      "default": {
+        "Int": 0
+      },
+      "id": "id-total"
+    },
+    {
+      "name": "average",
+      "ty": {
+        "kind": "float"
+      },
+      "default": {
+        "Float": 0.0
+      },
+      "id": "id-average"
+    }
+  ],
+  "functions": [
+    {
+      "name": "sumTo",
+      "exported": true,
+      "params": [
+        {
+          "kind": "int"
+        }
+      ],
+      "ret": {
+        "kind": "int"
+      },
+      "registers": [
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "bool"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "int"
+        }
+      ],
+      "code": [
+        {
+          "Const": {
+            "dst": 1,
+            "index": 0
+          }
+        },
+        {
+          "Move": {
+            "dst": 2,
+            "src": 1
+          }
+        },
+        {
+          "Const": {
+            "dst": 3,
+            "index": 1
+          }
+        },
+        {
+          "Move": {
+            "dst": 4,
+            "src": 3
+          }
+        },
+        {
+          "Binary": {
+            "op": "Le",
+            "dst": 5,
+            "a": 4,
+            "b": 0
+          }
+        },
+        {
+          "Branch": {
+            "cond": 5,
+            "then": 6,
+            "otherwise": 13
+          }
+        },
+        {
+          "Binary": {
+            "op": "Add",
+            "dst": 6,
+            "a": 2,
+            "b": 4
+          }
+        },
+        {
+          "Move": {
+            "dst": 2,
+            "src": 6
+          }
+        },
+        {
+          "Const": {
+            "dst": 7,
+            "index": 1
+          }
+        },
+        {
+          "Binary": {
+            "op": "Add",
+            "dst": 8,
+            "a": 4,
+            "b": 7
+          }
+        },
+        {
+          "Move": {
+            "dst": 9,
+            "src": 4
+          }
+        },
+        {
+          "Move": {
+            "dst": 4,
+            "src": 8
+          }
+        },
+        {
+          "Jump": {
+            "target": 4
+          }
+        },
+        {
+          "StoreVar": {
+            "var": 0,
+            "src": 2
+          }
+        },
+        {
+          "Return": {
+            "value": 2
+          }
+        },
+        {
+          "Jump": {
+            "target": 15
+          }
+        }
+      ],
+      "debug": {
+        "ranges": [
+          {
+            "start": 0,
+            "end": 2,
+            "loc": {
+              "file": "class.ts",
+              "line": 8,
+              "column": 9
+            }
+          },
+          {
+            "start": 2,
+            "end": 4,
+            "loc": {
+              "file": "class.ts",
+              "line": 9,
+              "column": 9
+            }
+          },
+          {
+            "start": 4,
+            "end": 6,
+            "loc": {
+              "file": "class.ts",
+              "line": 9,
+              "column": 30
+            }
+          },
+          {
+            "start": 6,
+            "end": 8,
+            "loc": {
+              "file": "class.ts",
+              "line": 10,
+              "column": 13
+            }
+          },
+          {
+            "start": 8,
+            "end": 13,
+            "loc": {
+              "file": "class.ts",
+              "line": 9,
+              "column": 38
+            }
+          },
+          {
+            "start": 13,
+            "end": 14,
+            "loc": {
+              "file": "class.ts",
+              "line": 12,
+              "column": 9
+            }
+          },
+          {
+            "start": 14,
+            "end": 16,
+            "loc": {
+              "file": "class.ts",
+              "line": 13,
+              "column": 9
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "sumEvens",
+      "exported": true,
+      "params": [
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "int"
+        }
+      ],
+      "ret": {
+        "kind": "int"
+      },
+      "registers": [
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "bool"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "bool"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "bool"
+        }
+      ],
+      "code": [
+        {
+          "Const": {
+            "dst": 2,
+            "index": 0
+          }
+        },
+        {
+          "Move": {
+            "dst": 3,
+            "src": 2
+          }
+        },
+        {
+          "Const": {
+            "dst": 4,
+            "index": 0
+          }
+        },
+        {
+          "Move": {
+            "dst": 5,
+            "src": 4
+          }
+        },
+        {
+          "Binary": {
+            "op": "Lt",
+            "dst": 6,
+            "a": 5,
+            "b": 0
+          }
+        },
+        {
+          "Branch": {
+            "cond": 6,
+            "then": 6,
+            "otherwise": 21
+          }
+        },
+        {
+          "Const": {
+            "dst": 7,
+            "index": 1
+          }
+        },
+        {
+          "Binary": {
+            "op": "Add",
+            "dst": 8,
+            "a": 5,
+            "b": 7
+          }
+        },
+        {
+          "Move": {
+            "dst": 5,
+            "src": 8
+          }
+        },
+        {
+          "Const": {
+            "dst": 9,
+            "index": 2
+          }
+        },
+        {
+          "Binary": {
+            "op": "Rem",
+            "dst": 10,
+            "a": 5,
+            "b": 9
+          }
+        },
+        {
+          "Const": {
+            "dst": 11,
+            "index": 1
+          }
+        },
+        {
+          "Binary": {
+            "op": "Eq",
+            "dst": 12,
+            "a": 10,
+            "b": 11
+          }
+        },
+        {
+          "Branch": {
+            "cond": 12,
+            "then": 14,
+            "otherwise": 15
+          }
+        },
+        {
+          "Jump": {
+            "target": 4
+          }
+        },
+        {
+          "Binary": {
+            "op": "Add",
+            "dst": 13,
+            "a": 3,
+            "b": 5
+          }
+        },
+        {
+          "Move": {
+            "dst": 3,
+            "src": 13
+          }
+        },
+        {
+          "Binary": {
+            "op": "Gt",
+            "dst": 14,
+            "a": 3,
+            "b": 1
+          }
+        },
+        {
+          "Branch": {
+            "cond": 14,
+            "then": 19,
+            "otherwise": 20
+          }
+        },
+        {
+          "Jump": {
+            "target": 21
+          }
+        },
+        {
+          "Jump": {
+            "target": 4
+          }
+        },
+        {
+          "Return": {
+            "value": 3
+          }
+        },
+        {
+          "Jump": {
+            "target": 22
+          }
+        }
+      ],
+      "debug": {
+        "ranges": [
+          {
+            "start": 0,
+            "end": 2,
+            "loc": {
+              "file": "class.ts",
+              "line": 19,
+              "column": 9
+            }
+          },
+          {
+            "start": 2,
+            "end": 4,
+            "loc": {
+              "file": "class.ts",
+              "line": 20,
+              "column": 9
+            }
+          },
+          {
+            "start": 4,
+            "end": 6,
+            "loc": {
+              "file": "class.ts",
+              "line": 21,
+              "column": 16
+            }
+          },
+          {
+            "start": 6,
+            "end": 9,
+            "loc": {
+              "file": "class.ts",
+              "line": 22,
+              "column": 13
+            }
+          },
+          {
+            "start": 9,
+            "end": 10,
+            "loc": {
+              "file": "class.ts",
+              "line": 23,
+              "column": 13
+            }
+          },
+          {
+            "start": 10,
+            "end": 14,
+            "loc": {
+              "file": "class.ts",
+              "line": 23,
+              "column": 17
+            }
+          },
+          {
+            "start": 14,
+            "end": 15,
+            "loc": {
+              "file": "class.ts",
+              "line": 24,
+              "column": 17
+            }
+          },
+          {
+            "start": 15,
+            "end": 17,
+            "loc": {
+              "file": "class.ts",
+              "line": 26,
+              "column": 13
+            }
+          },
+          {
+            "start": 17,
+            "end": 19,
+            "loc": {
+              "file": "class.ts",
+              "line": 27,
+              "column": 17
+            }
+          },
+          {
+            "start": 19,
+            "end": 21,
+            "loc": {
+              "file": "class.ts",
+              "line": 28,
+              "column": 17
+            }
+          },
+          {
+            "start": 21,
+            "end": 23,
+            "loc": {
+              "file": "class.ts",
+              "line": 31,
+              "column": 9
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "averageOf",
+      "exported": true,
+      "params": [
+        {
+          "kind": "int"
+        }
+      ],
+      "ret": {
+        "kind": "float"
+      },
+      "registers": [
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "bool"
+        },
+        {
+          "kind": "float"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "float"
+        },
+        {
+          "kind": "float"
+        },
+        {
+          "kind": "float"
+        },
+        {
+          "kind": "float"
+        }
+      ],
+      "code": [
+        {
+          "Const": {
+            "dst": 1,
+            "index": 0
+          }
+        },
+        {
+          "Binary": {
+            "op": "Eq",
+            "dst": 2,
+            "a": 0,
+            "b": 1
+          }
+        },
+        {
+          "Branch": {
+            "cond": 2,
+            "then": 3,
+            "otherwise": 5
+          }
+        },
+        {
+          "Const": {
+            "dst": 3,
+            "index": 3
+          }
+        },
+        {
+          "Return": {
+            "value": 3
+          }
+        },
+        {
+          "LoadVar": {
+            "dst": 4,
+            "var": 0
+          }
+        },
+        {
+          "Unary": {
+            "op": "IntToFloat",
+            "dst": 5,
+            "src": 4
+          }
+        },
+        {
+          "Unary": {
+            "op": "IntToFloat",
+            "dst": 6,
+            "src": 0
+          }
+        },
+        {
+          "Binary": {
+            "op": "Div",
+            "dst": 7,
+            "a": 5,
+            "b": 6
+          }
+        },
+        {
+          "StoreVar": {
+            "var": 1,
+            "src": 7
+          }
+        },
+        {
+          "LoadVar": {
+            "dst": 8,
+            "var": 1
+          }
+        },
+        {
+          "Return": {
+            "value": 8
+          }
+        },
+        {
+          "Jump": {
+            "target": 12
+          }
+        }
+      ],
+      "debug": {
+        "ranges": [
+          {
+            "start": 0,
+            "end": 1,
+            "loc": {
+              "file": "class.ts",
+              "line": 36,
+              "column": 9
+            }
+          },
+          {
+            "start": 1,
+            "end": 3,
+            "loc": {
+              "file": "class.ts",
+              "line": 36,
+              "column": 13
+            }
+          },
+          {
+            "start": 3,
+            "end": 5,
+            "loc": {
+              "file": "class.ts",
+              "line": 37,
+              "column": 13
+            }
+          },
+          {
+            "start": 5,
+            "end": 8,
+            "loc": {
+              "file": "class.ts",
+              "line": 39,
+              "column": 9
+            }
+          },
+          {
+            "start": 8,
+            "end": 9,
+            "loc": {
+              "file": "class.ts",
+              "line": 39,
+              "column": 24
+            }
+          },
+          {
+            "start": 9,
+            "end": 10,
+            "loc": {
+              "file": "class.ts",
+              "line": 39,
+              "column": 9
+            }
+          },
+          {
+            "start": 10,
+            "end": 13,
+            "loc": {
+              "file": "class.ts",
+              "line": 40,
+              "column": 9
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "clamp",
+      "exported": true,
+      "params": [
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "int"
+        }
+      ],
+      "ret": {
+        "kind": "int"
+      },
+      "registers": [
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "bool"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "bool"
+        },
+        {
+          "kind": "int"
+        }
+      ],
+      "code": [
+        {
+          "Binary": {
+            "op": "Lt",
+            "dst": 3,
+            "a": 0,
+            "b": 1
+          }
+        },
+        {
+          "Branch": {
+            "cond": 3,
+            "then": 2,
+            "otherwise": 4
+          }
+        },
+        {
+          "Move": {
+            "dst": 4,
+            "src": 1
+          }
+        },
+        {
+          "Jump": {
+            "target": 10
+          }
+        },
+        {
+          "Binary": {
+            "op": "Gt",
+            "dst": 5,
+            "a": 0,
+            "b": 2
+          }
+        },
+        {
+          "Branch": {
+            "cond": 5,
+            "then": 6,
+            "otherwise": 8
+          }
+        },
+        {
+          "Move": {
+            "dst": 6,
+            "src": 2
+          }
+        },
+        {
+          "Jump": {
+            "target": 9
+          }
+        },
+        {
+          "Move": {
+            "dst": 6,
+            "src": 0
+          }
+        },
+        {
+          "Move": {
+            "dst": 4,
+            "src": 6
+          }
+        },
+        {
+          "Return": {
+            "value": 4
+          }
+        },
+        {
+          "Jump": {
+            "target": 11
+          }
+        }
+      ],
+      "debug": {
+        "ranges": [
+          {
+            "start": 0,
+            "end": 4,
+            "loc": {
+              "file": "class.ts",
+              "line": 45,
+              "column": 16
+            }
+          },
+          {
+            "start": 4,
+            "end": 12,
+            "loc": {
+              "file": "class.ts",
+              "line": 45,
+              "column": 37
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "class_version": 1
+}
+binary: 5053564d050000000507436f756e74657204010001020104020000000000000000000205746f74616c02010100010869642d746f74616c07617665726167650301020000000000000000010a69642d61766572616765040573756d546f010102020a020202020201020202021000010001020100030101040303080504000505060d0300060204010206000701030008040701090401040804040900020d0102040f0107000208636c6173732e74730001080109020408636c6173732e74730001090109040608636c6173732e7473000109011e060808636c6173732e747300010a010d080d08636c6173732e747300010901260d0e08636c6173732e747300010c01090e1008636c6173732e747300010d0109000873756d4576656e7301020202020f02020202020201020202020201020117000200010302000400010504030706050005060615000701030008050701050800090203040a0509000b0103050c0a0b050c0e0f040403000d030501030d03090e0301050e1314041504040d01030416010b000208636c6173732e74730001130109020408636c6173732e74730001140109040608636c6173732e74730001150110060908636c6173732e7473000116010d090a08636c6173732e7473000117010d0a0e08636c6173732e747300011701110e0f08636c6173732e747300011801110f1108636c6173732e747300011a010d111308636c6173732e747300011b0111131508636c6173732e747300011c0111151708636c6173732e747300011f01090009617665726167654f6601010203090202010302030303030d0001000305020001050203050003030d0103080400020205040202060003030705060901070808010d0108040c0107000108636c6173732e74730001240109010308636c6173732e7473000124010d030508636c6173732e7473000125010d050808636c6173732e74730001270109080908636c6173732e74730001270118090a08636c6173732e747300012701090a0d08636c6173732e747300012801090005636c616d7001030202020207020202010201020c030703000105030204010401040a03090500020505060801060204090106000104060d0104040b0102000408636c6173732e747300012d0110040c08636c6173732e747300012d012500000001

@@ -1,0 +1,182 @@
+{
+  "format_version": 5,
+  "name": "Hero",
+  "constants": [
+    {
+      "Str": "hp"
+    },
+    {
+      "Float": 100.0
+    }
+  ],
+  "imports": [
+    {
+      "name": "migration::old_int",
+      "sig": {
+        "params": [
+          {
+            "ty": {
+              "kind": "str"
+            },
+            "inout": false
+          }
+        ],
+        "ret": {
+          "kind": "int"
+        }
+      }
+    }
+  ],
+  "variables": [
+    {
+      "name": "health",
+      "ty": {
+        "kind": "int"
+      },
+      "default": {
+        "Int": 10
+      },
+      "id": "id-hp"
+    },
+    {
+      "name": "position",
+      "ty": {
+        "kind": "object",
+        "name": "Vec3"
+      },
+      "default": {
+        "Value": {
+          "ty": "Vec3",
+          "json": "[1,2,3]"
+        }
+      },
+      "id": "id-position"
+    },
+    {
+      "name": "shield",
+      "ty": {
+        "kind": "float"
+      },
+      "default": {
+        "Float": 0.0
+      },
+      "id": "id-shield"
+    }
+  ],
+  "functions": [
+    {
+      "name": "migrate",
+      "exported": true,
+      "params": [
+        {
+          "kind": "int"
+        }
+      ],
+      "ret": {
+        "kind": "unit"
+      },
+      "registers": [
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "str"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "float"
+        },
+        {
+          "kind": "float"
+        },
+        {
+          "kind": "float"
+        }
+      ],
+      "code": [
+        {
+          "Const": {
+            "dst": 1,
+            "index": 0
+          }
+        },
+        {
+          "CallNative": {
+            "import": 0,
+            "args": [
+              1
+            ],
+            "dst": 2
+          }
+        },
+        {
+          "Unary": {
+            "op": "IntToFloat",
+            "dst": 3,
+            "src": 2
+          }
+        },
+        {
+          "Const": {
+            "dst": 4,
+            "index": 1
+          }
+        },
+        {
+          "Binary": {
+            "op": "Div",
+            "dst": 5,
+            "a": 3,
+            "b": 4
+          }
+        },
+        {
+          "StoreVar": {
+            "var": 2,
+            "src": 5
+          }
+        },
+        {
+          "Return": {
+            "value": null
+          }
+        }
+      ],
+      "debug": {
+        "ranges": [
+          {
+            "start": 0,
+            "end": 4,
+            "loc": {
+              "file": "class.ts",
+              "line": 17,
+              "column": 24
+            }
+          },
+          {
+            "start": 4,
+            "end": 5,
+            "loc": {
+              "file": "class.ts",
+              "line": 17,
+              "column": 23
+            }
+          },
+          {
+            "start": 5,
+            "end": 7,
+            "loc": {
+              "file": "class.ts",
+              "line": 17,
+              "column": 9
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "class_version": 2
+}
+binary: 5053564d0500000005044865726f020302687002000000000000594001126d6967726174696f6e3a3a6f6c645f696e740104000203066865616c746802010114010569642d687008706f736974696f6e07045665633301040456656333075b312c322c335d010b69642d706f736974696f6e06736869656c640301020000000000000000010969642d736869656c6401076d6967726174650101020006020402030303070001000700010101020202030200040103030503040902050d000103000408636c6173732e74730001110118040508636c6173732e74730001110117050708636c6173732e7473000111010900000002

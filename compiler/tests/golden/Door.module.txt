@@ -1,0 +1,308 @@
+{
+  "format_version": 5,
+  "name": "Door",
+  "constants": [
+    {
+      "Bool": true
+    },
+    {
+      "Int": 1
+    },
+    {
+      "Bool": false
+    }
+  ],
+  "imports": [],
+  "variables": [
+    {
+      "name": "isOpen",
+      "ty": {
+        "kind": "bool"
+      },
+      "default": {
+        "Bool": false
+      },
+      "id": "id-isOpen"
+    },
+    {
+      "name": "openings",
+      "ty": {
+        "kind": "int"
+      },
+      "default": {
+        "Int": 0
+      },
+      "id": "id-openings"
+    },
+    {
+      "name": "openSeconds",
+      "ty": {
+        "kind": "float"
+      },
+      "default": {
+        "Float": 2.0
+      },
+      "id": "id-openSeconds"
+    }
+  ],
+  "functions": [
+    {
+      "name": "open",
+      "exported": true,
+      "params": [],
+      "ret": {
+        "kind": "unit"
+      },
+      "registers": [
+        {
+          "kind": "bool"
+        },
+        {
+          "kind": "bool"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "float"
+        }
+      ],
+      "code": [
+        {
+          "LoadVar": {
+            "dst": 0,
+            "var": 0
+          }
+        },
+        {
+          "Branch": {
+            "cond": 0,
+            "then": 2,
+            "otherwise": 3
+          }
+        },
+        {
+          "Return": {
+            "value": null
+          }
+        },
+        {
+          "Const": {
+            "dst": 1,
+            "index": 0
+          }
+        },
+        {
+          "StoreVar": {
+            "var": 0,
+            "src": 1
+          }
+        },
+        {
+          "LoadVar": {
+            "dst": 2,
+            "var": 1
+          }
+        },
+        {
+          "Const": {
+            "dst": 3,
+            "index": 1
+          }
+        },
+        {
+          "Binary": {
+            "op": "Add",
+            "dst": 4,
+            "a": 2,
+            "b": 3
+          }
+        },
+        {
+          "StoreVar": {
+            "var": 1,
+            "src": 4
+          }
+        },
+        {
+          "LoadVar": {
+            "dst": 5,
+            "var": 2
+          }
+        },
+        {
+          "Wait": {
+            "seconds": 5
+          }
+        },
+        {
+          "Call": {
+            "func": 1,
+            "args": [],
+            "dst": null
+          }
+        },
+        {
+          "Return": {
+            "value": null
+          }
+        }
+      ],
+      "debug": {
+        "ranges": [
+          {
+            "start": 0,
+            "end": 2,
+            "loc": {
+              "file": "class.ts",
+              "line": 14,
+              "column": 9
+            }
+          },
+          {
+            "start": 2,
+            "end": 3,
+            "loc": {
+              "file": "class.ts",
+              "line": 15,
+              "column": 13
+            }
+          },
+          {
+            "start": 3,
+            "end": 5,
+            "loc": {
+              "file": "class.ts",
+              "line": 17,
+              "column": 9
+            }
+          },
+          {
+            "start": 5,
+            "end": 9,
+            "loc": {
+              "file": "class.ts",
+              "line": 18,
+              "column": 9
+            }
+          },
+          {
+            "start": 9,
+            "end": 11,
+            "loc": {
+              "file": "class.ts",
+              "line": 19,
+              "column": 9
+            }
+          },
+          {
+            "start": 11,
+            "end": 13,
+            "loc": {
+              "file": "class.ts",
+              "line": 20,
+              "column": 9
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "close",
+      "exported": true,
+      "params": [],
+      "ret": {
+        "kind": "unit"
+      },
+      "registers": [
+        {
+          "kind": "bool"
+        }
+      ],
+      "code": [
+        {
+          "Const": {
+            "dst": 0,
+            "index": 2
+          }
+        },
+        {
+          "StoreVar": {
+            "var": 0,
+            "src": 0
+          }
+        },
+        {
+          "Return": {
+            "value": null
+          }
+        }
+      ],
+      "debug": {
+        "ranges": [
+          {
+            "start": 0,
+            "end": 3,
+            "loc": {
+              "file": "class.ts",
+              "line": 24,
+              "column": 9
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "timesOpened",
+      "exported": true,
+      "params": [],
+      "ret": {
+        "kind": "int"
+      },
+      "registers": [
+        {
+          "kind": "int"
+        }
+      ],
+      "code": [
+        {
+          "LoadVar": {
+            "dst": 0,
+            "var": 1
+          }
+        },
+        {
+          "Return": {
+            "value": 0
+          }
+        },
+        {
+          "Jump": {
+            "target": 2
+          }
+        }
+      ],
+      "debug": {
+        "ranges": [
+          {
+            "start": 0,
+            "end": 3,
+            "loc": {
+              "file": "class.ts",
+              "line": 29,
+              "column": 9
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "class_version": 1
+}
+binary: 5053564d050000000504446f6f720300010102000000030669734f70656e01010000010969642d69734f70656e086f70656e696e677302010100010b69642d6f70656e696e67730b6f70656e5365636f6e64730301020000000000000040010e69642d6f70656e5365636f6e647303046f70656e010000060101020202030d080000050002030d0000010009000108020100030103000402030901040805020c05060100000d000106000208636c6173732e747300010e0109020308636c6173732e747300010f010d030508636c6173732e74730001110109050908636c6173732e74730001120109090b08636c6173732e747300011301090b0d08636c6173732e747300011401090005636c6f73650100000101030000020900000d000101000308636c6173732e74730001180109000b74696d65734f70656e65640100020102030800010d010004020101000308636c6173732e747300011d010900000001

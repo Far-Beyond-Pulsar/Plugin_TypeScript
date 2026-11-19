@@ -1,0 +1,661 @@
+{
+  "format_version": 5,
+  "name": "Beacon",
+  "constants": [
+    {
+      "Bool": true
+    },
+    {
+      "Str": "o"
+    },
+    {
+      "Str": "a"
+    },
+    {
+      "Str": "b"
+    },
+    {
+      "Int": 2
+    },
+    {
+      "Int": 1
+    },
+    {
+      "Str": "n"
+    },
+    {
+      "Float": 0.5
+    },
+    {
+      "Bool": false
+    },
+    {
+      "Str": "d"
+    }
+  ],
+  "imports": [],
+  "variables": [
+    {
+      "name": "log",
+      "ty": {
+        "kind": "str"
+      },
+      "default": {
+        "Str": ""
+      },
+      "id": "id-log"
+    },
+    {
+      "name": "done",
+      "ty": {
+        "kind": "bool"
+      },
+      "default": {
+        "Bool": false
+      },
+      "id": "id-done"
+    },
+    {
+      "name": "flip",
+      "ty": {
+        "kind": "bool"
+      },
+      "default": {
+        "Bool": false
+      },
+      "id": "id-flip"
+    },
+    {
+      "name": "runs",
+      "ty": {
+        "kind": "int"
+      },
+      "default": {
+        "Int": 0
+      },
+      "id": "id-runs"
+    },
+    {
+      "name": "pending",
+      "ty": {
+        "kind": "bool"
+      },
+      "default": {
+        "Bool": false
+      },
+      "id": "id-pending"
+    }
+  ],
+  "functions": [
+    {
+      "name": "on_fire",
+      "exported": true,
+      "params": [],
+      "ret": {
+        "kind": "unit"
+      },
+      "registers": [
+        {
+          "kind": "bool"
+        },
+        {
+          "kind": "bool"
+        },
+        {
+          "kind": "bool"
+        },
+        {
+          "kind": "str"
+        },
+        {
+          "kind": "str"
+        },
+        {
+          "kind": "str"
+        },
+        {
+          "kind": "bool"
+        },
+        {
+          "kind": "str"
+        },
+        {
+          "kind": "str"
+        },
+        {
+          "kind": "str"
+        },
+        {
+          "kind": "str"
+        },
+        {
+          "kind": "str"
+        },
+        {
+          "kind": "str"
+        },
+        {
+          "kind": "bool"
+        },
+        {
+          "kind": "bool"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "bool"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "int"
+        },
+        {
+          "kind": "str"
+        },
+        {
+          "kind": "str"
+        },
+        {
+          "kind": "str"
+        },
+        {
+          "kind": "bool"
+        },
+        {
+          "kind": "bool"
+        },
+        {
+          "kind": "bool"
+        },
+        {
+          "kind": "float"
+        },
+        {
+          "kind": "bool"
+        },
+        {
+          "kind": "str"
+        },
+        {
+          "kind": "str"
+        },
+        {
+          "kind": "str"
+        }
+      ],
+      "code": [
+        {
+          "LoadVar": {
+            "dst": 0,
+            "var": 1
+          }
+        },
+        {
+          "Unary": {
+            "op": "Not",
+            "dst": 1,
+            "src": 0
+          }
+        },
+        {
+          "Branch": {
+            "cond": 1,
+            "then": 3,
+            "otherwise": 9
+          }
+        },
+        {
+          "Const": {
+            "dst": 2,
+            "index": 0
+          }
+        },
+        {
+          "StoreVar": {
+            "var": 1,
+            "src": 2
+          }
+        },
+        {
+          "LoadVar": {
+            "dst": 3,
+            "var": 0
+          }
+        },
+        {
+          "Const": {
+            "dst": 4,
+            "index": 1
+          }
+        },
+        {
+          "Binary": {
+            "op": "Add",
+            "dst": 5,
+            "a": 3,
+            "b": 4
+          }
+        },
+        {
+          "StoreVar": {
+            "var": 0,
+            "src": 5
+          }
+        },
+        {
+          "LoadVar": {
+            "dst": 6,
+            "var": 2
+          }
+        },
+        {
+          "Branch": {
+            "cond": 6,
+            "then": 11,
+            "otherwise": 16
+          }
+        },
+        {
+          "LoadVar": {
+            "dst": 7,
+            "var": 0
+          }
+        },
+        {
+          "Const": {
+            "dst": 8,
+            "index": 2
+          }
+        },
+        {
+          "Binary": {
+            "op": "Add",
+            "dst": 9,
+            "a": 7,
+            "b": 8
+          }
+        },
+        {
+          "StoreVar": {
+            "var": 0,
+            "src": 9
+          }
+        },
+        {
+          "Jump": {
+            "target": 20
+          }
+        },
+        {
+          "LoadVar": {
+            "dst": 10,
+            "var": 0
+          }
+        },
+        {
+          "Const": {
+            "dst": 11,
+            "index": 3
+          }
+        },
+        {
+          "Binary": {
+            "op": "Add",
+            "dst": 12,
+            "a": 10,
+            "b": 11
+          }
+        },
+        {
+          "StoreVar": {
+            "var": 0,
+            "src": 12
+          }
+        },
+        {
+          "LoadVar": {
+            "dst": 13,
+            "var": 2
+          }
+        },
+        {
+          "Unary": {
+            "op": "Not",
+            "dst": 14,
+            "src": 13
+          }
+        },
+        {
+          "StoreVar": {
+            "var": 2,
+            "src": 14
+          }
+        },
+        {
+          "LoadVar": {
+            "dst": 15,
+            "var": 3
+          }
+        },
+        {
+          "Const": {
+            "dst": 16,
+            "index": 4
+          }
+        },
+        {
+          "Binary": {
+            "op": "Lt",
+            "dst": 17,
+            "a": 15,
+            "b": 16
+          }
+        },
+        {
+          "Branch": {
+            "cond": 17,
+            "then": 27,
+            "otherwise": 35
+          }
+        },
+        {
+          "LoadVar": {
+            "dst": 18,
+            "var": 3
+          }
+        },
+        {
+          "Const": {
+            "dst": 19,
+            "index": 5
+          }
+        },
+        {
+          "Binary": {
+            "op": "Add",
+            "dst": 20,
+            "a": 18,
+            "b": 19
+          }
+        },
+        {
+          "StoreVar": {
+            "var": 3,
+            "src": 20
+          }
+        },
+        {
+          "LoadVar": {
+            "dst": 21,
+            "var": 0
+          }
+        },
+        {
+          "Const": {
+            "dst": 22,
+            "index": 6
+          }
+        },
+        {
+          "Binary": {
+            "op": "Add",
+            "dst": 23,
+            "a": 21,
+            "b": 22
+          }
+        },
+        {
+          "StoreVar": {
+            "var": 0,
+            "src": 23
+          }
+        },
+        {
+          "LoadVar": {
+            "dst": 24,
+            "var": 4
+          }
+        },
+        {
+          "Unary": {
+            "op": "Not",
+            "dst": 25,
+            "src": 24
+          }
+        },
+        {
+          "Branch": {
+            "cond": 25,
+            "then": 38,
+            "otherwise": 48
+          }
+        },
+        {
+          "Const": {
+            "dst": 26,
+            "index": 0
+          }
+        },
+        {
+          "StoreVar": {
+            "var": 4,
+            "src": 26
+          }
+        },
+        {
+          "Const": {
+            "dst": 27,
+            "index": 7
+          }
+        },
+        {
+          "Wait": {
+            "seconds": 27
+          }
+        },
+        {
+          "Const": {
+            "dst": 28,
+            "index": 8
+          }
+        },
+        {
+          "StoreVar": {
+            "var": 4,
+            "src": 28
+          }
+        },
+        {
+          "LoadVar": {
+            "dst": 29,
+            "var": 0
+          }
+        },
+        {
+          "Const": {
+            "dst": 30,
+            "index": 9
+          }
+        },
+        {
+          "Binary": {
+            "op": "Add",
+            "dst": 31,
+            "a": 29,
+            "b": 30
+          }
+        },
+        {
+          "StoreVar": {
+            "var": 0,
+            "src": 31
+          }
+        },
+        {
+          "Return": {
+            "value": null
+          }
+        }
+      ],
+      "debug": {
+        "ranges": [
+          {
+            "start": 0,
+            "end": 3,
+            "loc": {
+              "file": "class.ts",
+              "line": 10,
+              "column": 9
+            }
+          },
+          {
+            "start": 3,
+            "end": 5,
+            "loc": {
+              "file": "class.ts",
+              "line": 10,
+              "column": 27
+            }
+          },
+          {
+            "start": 5,
+            "end": 9,
+            "loc": {
+              "file": "class.ts",
+              "line": 10,
+              "column": 45
+            }
+          },
+          {
+            "start": 9,
+            "end": 11,
+            "loc": {
+              "file": "class.ts",
+              "line": 11,
+              "column": 9
+            }
+          },
+          {
+            "start": 11,
+            "end": 16,
+            "loc": {
+              "file": "class.ts",
+              "line": 11,
+              "column": 26
+            }
+          },
+          {
+            "start": 16,
+            "end": 20,
+            "loc": {
+              "file": "class.ts",
+              "line": 11,
+              "column": 52
+            }
+          },
+          {
+            "start": 20,
+            "end": 23,
+            "loc": {
+              "file": "class.ts",
+              "line": 12,
+              "column": 9
+            }
+          },
+          {
+            "start": 23,
+            "end": 25,
+            "loc": {
+              "file": "class.ts",
+              "line": 13,
+              "column": 9
+            }
+          },
+          {
+            "start": 25,
+            "end": 27,
+            "loc": {
+              "file": "class.ts",
+              "line": 13,
+              "column": 13
+            }
+          },
+          {
+            "start": 27,
+            "end": 31,
+            "loc": {
+              "file": "class.ts",
+              "line": 13,
+              "column": 30
+            }
+          },
+          {
+            "start": 31,
+            "end": 35,
+            "loc": {
+              "file": "class.ts",
+              "line": 13,
+              "column": 46
+            }
+          },
+          {
+            "start": 35,
+            "end": 38,
+            "loc": {
+              "file": "class.ts",
+              "line": 14,
+              "column": 9
+            }
+          },
+          {
+            "start": 38,
+            "end": 40,
+            "loc": {
+              "file": "class.ts",
+              "line": 15,
+              "column": 13
+            }
+          },
+          {
+            "start": 40,
+            "end": 42,
+            "loc": {
+              "file": "class.ts",
+              "line": 16,
+              "column": 13
+            }
+          },
+          {
+            "start": 42,
+            "end": 44,
+            "loc": {
+              "file": "class.ts",
+              "line": 17,
+              "column": 13
+            }
+          },
+          {
+            "start": 44,
+            "end": 49,
+            "loc": {
+              "file": "class.ts",
+              "line": 18,
+              "column": 13
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "class_version": 1
+}
+binary: 5053564d050000000506426561636f6e0a000103016f0301610301620104010203016e02000000000000e03f00000301640005036c6f6704010300010669642d6c6f6704646f6e6501010000010769642d646f6e6504666c697001010000010769642d666c69700472756e7302010100010769642d72756e730770656e64696e6701010000010a69642d70656e64696e6701076f6e5f66697265010000200101010404040104040404040401010202010202020404040101010301040404310800010201010005010309000200090102080300000401030005030409000508060205060b1008070000080203000907080900090414080a00000b0303000c0a0b09000c080d0202010e0d09020e080f030010040307110f1005111b23081203001305030014121309031408150000160603001715160900170818040201191805192630001a0009041a001b070c1b001c0809041c081d00001e0903001f1d1e09001f0d000110000308636c6173732e747300010a0109030508636c6173732e747300010a011b050908636c6173732e747300010a012d090b08636c6173732e747300010b01090b1008636c6173732e747300010b011a101408636c6173732e747300010b0134141708636c6173732e747300010c0109171908636c6173732e747300010d0109191b08636c6173732e747300010d010d1b1f08636c6173732e747300010d011e1f2308636c6173732e747300010d012e232608636c6173732e747300010e0109262808636c6173732e747300010f010d282a08636c6173732e7473000110010d2a2c08636c6173732e7473000111010d2c3108636c6173732e7473000112010d00000001
