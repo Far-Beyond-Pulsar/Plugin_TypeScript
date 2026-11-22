@@ -83,6 +83,12 @@ pub const LANGUAGE: plugin_editor_api::Language = plugin_editor_api::Language {
 /// What the plugin registers (this crate is its root): its examples and its
 /// language.
 pub fn build(p: &mut pulsar_plugins::PluginBuilder) {
+    // The icon the editor shows beside this plugin (Extensions window).
+    p.add(pulsar_plugins::PluginIcon {
+        origin: p.origin(),
+        format: pulsar_plugins::IconFormat::Png,
+        bytes: include_bytes!("../icon.png"),
+    });
     examples::build(p);
     p.add(LANGUAGE);
     p.add(pulsar_settings::plugin::PluginSettings {
