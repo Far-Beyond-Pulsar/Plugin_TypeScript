@@ -64,12 +64,20 @@ fn project(source: &str) -> Project {
     std::fs::create_dir_all(&class_dir).unwrap();
     let class = class_dir.join("class.ts");
     std::fs::write(&class, source).unwrap();
-    Project { _dir: dir, root, class }
+    Project {
+        _dir: dir,
+        root,
+        class,
+    }
 }
 
 /// Run the executor until `done` holds (the server's thread and the editor
 /// task pool are real threads; a bounded wait, never a sleep for its own sake).
-fn wait_for(cx: &mut TestAppContext, what: &str, mut done: impl FnMut(&mut TestAppContext) -> bool) {
+fn wait_for(
+    cx: &mut TestAppContext,
+    what: &str,
+    mut done: impl FnMut(&mut TestAppContext) -> bool,
+) {
     cx.executor().allow_parking();
     let deadline = Instant::now() + Duration::from_secs(20);
     loop {
@@ -107,13 +115,20 @@ fn scripted_tsserver(publish: Vec<Value>) -> pulsar_lsp::testing::ScriptedServer
             }}),
         ),
         Some("initialized") => {
-            reply.request(json!(900), "window/workDoneProgress/create", json!({ "token": "init" }));
+            reply.request(
+                json!(900),
+                "window/workDoneProgress/create",
+                json!({ "token": "init" }),
+            );
             reply.notify(
                 "$/progress",
                 json!({ "token": "init", "value": {
                     "kind": "begin", "title": "Initializing JS/TS language features" } }),
             );
-            reply.notify("$/progress", json!({ "token": "init", "value": { "kind": "end" } }));
+            reply.notify(
+                "$/progress",
+                json!({ "token": "init", "value": { "kind": "end" } }),
+            );
         }
         Some("textDocument/didOpen") => {
             let uri = message["params"]["textDocument"]["uri"].clone();
@@ -136,7 +151,14 @@ fn server_for(
 ) -> gpui::Entity<LanguageServer> {
     let root = project.root.join("src").join("classes");
     cx.new(|_| {
-        LanguageServer::new(&LANGUAGE, &SPEC, root, project.root.clone(), settings, store)
+        LanguageServer::new(
+            &LANGUAGE,
+            &SPEC,
+            root,
+            project.root.clone(),
+            settings,
+            store,
+        )
     })
 }
 
@@ -147,9 +169,14 @@ fn a_ts_class_shows_the_servers_diagnostics_under_the_servers_source(cx: &mut Te
     let store = cx.new(|_| DiagnosticsStore::new());
     let server = server_for(cx, &project, ServerSettings::default(), store.clone());
 
-    let tsserver = scripted_tsserver(vec![diagnostic_of(&project.class, "Type 'string' is not assignable to type 'number'.")]);
+    let tsserver = scripted_tsserver(vec![diagnostic_of(
+        &project.class,
+        "Type 'string' is not assignable to type 'number'.",
+    )]);
     let received = tsserver.received.clone();
-    server.update(cx, |server, cx| server.attach(tsserver.reader, tsserver.writer, cx));
+    server.update(cx, |server, cx| {
+        server.attach(tsserver.reader, tsserver.writer, cx)
+    });
 
     // The server is ready when its loading work has ended (the rule of the
     // spec), not before and not by a timer.
@@ -158,16 +185,31 @@ fn a_ts_class_shows_the_servers_diagnostics_under_the_servers_source(cx: &mut Te
     });
 
     // The handshake: rooted at the class folder, no typings downloads.
-    let initialize = received.try_iter().find(|m| m["method"] == "initialize").expect("initialize was sent");
-    let root_uri = initialize["params"]["rootUri"].as_str().unwrap().to_string();
+    let initialize = received
+        .try_iter()
+        .find(|m| m["method"] == "initialize")
+        .expect("initialize was sent");
+    let root_uri = initialize["params"]["rootUri"]
+        .as_str()
+        .unwrap()
+        .to_string();
     assert!(root_uri.ends_with("/src/classes"), "{root_uri}");
-    assert_eq!(initialize["params"]["initializationOptions"]["disableAutomaticTypingAcquisition"], true);
-    assert_eq!(initialize["params"]["initializationOptions"]["hostInfo"], "Pulsar");
+    assert_eq!(
+        initialize["params"]["initializationOptions"]["disableAutomaticTypingAcquisition"],
+        true
+    );
+    assert_eq!(
+        initialize["params"]["initializationOptions"]["hostInfo"],
+        "Pulsar"
+    );
 
     // The workspace was prepared before the server started: the tsconfig for
     // the class folder and the declarations it points at.
     let tsconfig = std::fs::read_to_string(project.root.join("src/classes/tsconfig.json")).unwrap();
-    assert!(tsconfig.contains("../../Pulsar/types/*.d.ts") && tsconfig.contains("\"lib\": [\"ES2022\"]"));
+    assert!(
+        tsconfig.contains("../../Pulsar/types/*.d.ts")
+            && tsconfig.contains("\"lib\": [\"ES2022\"]")
+    );
     assert!(project.root.join("Pulsar/types/pulsar.d.ts").is_file());
 
     // Open the class: the server publishes, and the store holds it under the
@@ -175,24 +217,39 @@ fn a_ts_class_shows_the_servers_diagnostics_under_the_servers_source(cx: &mut Te
     let text = std::fs::read_to_string(&project.class).unwrap();
     server.read_with(cx, |server, _| {
         assert_eq!(server.language_id_of(&project.class), "typescript");
-        server.did_open_file(&project.class, &text, "typescript").unwrap();
+        server
+            .did_open_file(&project.class, &text, "typescript")
+            .unwrap();
     });
     wait_for(cx, "the server's diagnostics", |cx| {
-        !store.read_with(cx, |store, _| store.for_file(&project.class)).is_empty()
+        !store
+            .read_with(cx, |store, _| store.for_file(&project.class))
+            .is_empty()
     });
     let entries = store.read_with(cx, |store, _| store.for_file(&project.class));
     assert_eq!(entries.len(), 1);
     let (source, diagnostic) = &entries[0];
-    let id = ServerId { server: "typescript-language-server", root: project.root.join("src/classes") };
-    assert_eq!(*source, DiagnosticSource::Server(id), "grouped by its server in the drawer");
+    let id = ServerId {
+        server: "typescript-language-server",
+        root: project.root.join("src/classes"),
+    };
+    assert_eq!(
+        *source,
+        DiagnosticSource::Server(id),
+        "grouped by its server in the drawer"
+    );
     assert_eq!(source.label(), "typescript-language-server");
     assert_eq!(diagnostic.source.as_deref(), Some("ts"));
     assert_eq!((diagnostic.line, diagnostic.column), (4, 5));
     assert!(diagnostic.message.contains("not assignable"));
 
     // Stopping the server takes its diagnostics with it.
-    server.update(cx, |server, cx| server.stop(pulsar_lsp::StopReason::Requested, cx));
-    assert!(store.read_with(cx, |store, _| store.for_file(&project.class)).is_empty());
+    server.update(cx, |server, cx| {
+        server.stop(pulsar_lsp::StopReason::Requested, cx)
+    });
+    assert!(store
+        .read_with(cx, |store, _| store.for_file(&project.class))
+        .is_empty());
 }
 
 #[gpui::test]
@@ -211,46 +268,79 @@ fn a_construct_the_server_accepts_and_the_compiler_rejects_shows_only_the_pulsar
     // The server accepts the arrow function: it publishes nothing.
     let server = server_for(cx, &project, ServerSettings::default(), store.clone());
     let tsserver = scripted_tsserver(Vec::new());
-    server.update(cx, |server, cx| server.attach(tsserver.reader, tsserver.writer, cx));
+    server.update(cx, |server, cx| {
+        server.attach(tsserver.reader, tsserver.writer, cx)
+    });
     wait_for(cx, "the server to be ready", |cx| {
         server.read_with(cx, |server, _| *server.status() == ServerStatus::Ready)
     });
     let text = std::fs::read_to_string(&project.class).unwrap();
-    server.read_with(cx, |server, _| server.did_open_file(&project.class, &text, "typescript").unwrap());
+    server.read_with(cx, |server, _| {
+        server
+            .did_open_file(&project.class, &text, "typescript")
+            .unwrap()
+    });
 
     // The editor hands over the (unsaved) text: the service checks it.
     assert!(service.read_with(cx, |service, _| service.has_compiler_for(&project.class)));
-    service.update(cx, |service, cx| service.check_source(&project.class, &text, cx));
+    service.update(cx, |service, cx| {
+        service.check_source(&project.class, &text, cx)
+    });
     cx.executor().advance_clock(Duration::from_secs(1));
     wait_for(cx, "the compiler's diagnostics", |cx| {
-        !store.read_with(cx, |store, _| store.for_file(&project.class)).is_empty()
+        !store
+            .read_with(cx, |store, _| store.for_file(&project.class))
+            .is_empty()
     });
 
     let entries = store.read_with(cx, |store, _| store.for_file(&project.class));
-    assert_eq!(entries.len(), 1, "only the compiler has something to say: {entries:#?}");
+    assert_eq!(
+        entries.len(),
+        1,
+        "only the compiler has something to say: {entries:#?}"
+    );
     let (source, diagnostic) = &entries[0];
     assert_eq!(*source, DiagnosticSource::Compiler("typescript"));
     assert_eq!(diagnostic.source.as_deref(), Some("Pulsar"));
-    assert_eq!(diagnostic.severity, ui::diagnostics::DiagnosticSeverity::Error);
-    assert_eq!(diagnostic.line, 5, "the arrow function is on line 5: {diagnostic:?}");
-    assert!(diagnostic.end_column > Some(diagnostic.column), "a range, not a point");
+    assert_eq!(
+        diagnostic.severity,
+        ui::diagnostics::DiagnosticSeverity::Error
+    );
+    assert_eq!(
+        diagnostic.line, 5,
+        "the arrow function is on line 5: {diagnostic:?}"
+    );
+    assert!(
+        diagnostic.end_column > Some(diagnostic.column),
+        "a range, not a point"
+    );
     assert!(!diagnostic.message.is_empty());
 
     // Fixing the class clears the compiler's entry (an empty result clears).
-    service.update(cx, |service, cx| service.check_source(&project.class, DOOR, cx));
+    service.update(cx, |service, cx| {
+        service.check_source(&project.class, DOOR, cx)
+    });
     cx.executor().advance_clock(Duration::from_secs(1));
     wait_for(cx, "the compiler's diagnostics to clear", |cx| {
-        store.read_with(cx, |store, _| store.for_file(&project.class)).is_empty()
+        store
+            .read_with(cx, |store, _| store.for_file(&project.class))
+            .is_empty()
     });
 
     // Closing the file forgets it.
-    service.update(cx, |service, cx| service.check_source(&project.class, DOOR_WITH_ARROW, cx));
+    service.update(cx, |service, cx| {
+        service.check_source(&project.class, DOOR_WITH_ARROW, cx)
+    });
     cx.executor().advance_clock(Duration::from_secs(1));
     wait_for(cx, "the compiler's diagnostics again", |cx| {
-        !store.read_with(cx, |store, _| store.for_file(&project.class)).is_empty()
+        !store
+            .read_with(cx, |store, _| store.for_file(&project.class))
+            .is_empty()
     });
     service.update(cx, |service, cx| service.forget_source(&project.class, cx));
-    assert!(store.read_with(cx, |store, _| store.for_file(&project.class)).is_empty());
+    assert!(store
+        .read_with(cx, |store, _| store.for_file(&project.class))
+        .is_empty());
 }
 
 #[gpui::test]
@@ -264,26 +354,48 @@ fn the_servers_and_the_compilers_diagnostics_are_two_sources_of_one_file(cx: &mu
         service.set_check_debounce(Duration::from_millis(10));
     });
     let server = server_for(cx, &project, ServerSettings::default(), store.clone());
-    let tsserver = scripted_tsserver(vec![diagnostic_of(&project.class, "'twice' is declared but its value is never read.")]);
-    server.update(cx, |server, cx| server.attach(tsserver.reader, tsserver.writer, cx));
+    let tsserver = scripted_tsserver(vec![diagnostic_of(
+        &project.class,
+        "'twice' is declared but its value is never read.",
+    )]);
+    server.update(cx, |server, cx| {
+        server.attach(tsserver.reader, tsserver.writer, cx)
+    });
     wait_for(cx, "the server to be ready", |cx| {
         server.read_with(cx, |server, _| *server.status() == ServerStatus::Ready)
     });
     let text = std::fs::read_to_string(&project.class).unwrap();
-    server.read_with(cx, |server, _| server.did_open_file(&project.class, &text, "typescript").unwrap());
-    service.update(cx, |service, cx| service.check_source(&project.class, &text, cx));
+    server.read_with(cx, |server, _| {
+        server
+            .did_open_file(&project.class, &text, "typescript")
+            .unwrap()
+    });
+    service.update(cx, |service, cx| {
+        service.check_source(&project.class, &text, cx)
+    });
     cx.executor().advance_clock(Duration::from_secs(1));
     wait_for(cx, "both sources", |cx| {
-        store.read_with(cx, |store, _| store.for_file(&project.class)).len() == 2
+        store
+            .read_with(cx, |store, _| store.for_file(&project.class))
+            .len()
+            == 2
     });
     let entries = store.read_with(cx, |store, _| store.for_file(&project.class));
     let labels: Vec<String> = entries.iter().map(|(source, _)| source.label()).collect();
-    assert!(labels.contains(&"typescript-language-server".to_string()), "{labels:?}");
-    assert!(labels.contains(&"typescript compiler".to_string()), "{labels:?}");
+    assert!(
+        labels.contains(&"typescript-language-server".to_string()),
+        "{labels:?}"
+    );
+    assert!(
+        labels.contains(&"typescript compiler".to_string()),
+        "{labels:?}"
+    );
 }
 
 #[gpui::test]
-fn a_server_that_is_not_found_is_an_actionable_status_never_a_silent_no_op(cx: &mut TestAppContext) {
+fn a_server_that_is_not_found_is_an_actionable_status_never_a_silent_no_op(
+    cx: &mut TestAppContext,
+) {
     activate();
     let project = project(DOOR);
     let store = cx.new(|_| DiagnosticsStore::new());
@@ -295,25 +407,42 @@ fn a_server_that_is_not_found_is_an_actionable_status_never_a_silent_no_op(cx: &
     let events = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
     let seen = events.clone();
     let _subscription = cx.update(|cx| {
-        cx.subscribe(&server, move |_, event: &pulsar_lsp::ServerEvent, _| seen.borrow_mut().push(event.clone()))
+        cx.subscribe(&server, move |_, event: &pulsar_lsp::ServerEvent, _| {
+            seen.borrow_mut().push(event.clone())
+        })
     });
     server.update(cx, |server, cx| server.start(cx));
     wait_for(cx, "the missing status", |cx| {
-        matches!(server.read_with(cx, |server, _| server.status().clone()), ServerStatus::Missing(_))
+        matches!(
+            server.read_with(cx, |server, _| server.status().clone()),
+            ServerStatus::Missing(_)
+        )
     });
-    let ServerStatus::Missing(message) = server.read_with(cx, |server, _| server.status().clone()) else {
+    let ServerStatus::Missing(message) = server.read_with(cx, |server, _| server.status().clone())
+    else {
         unreachable!()
     };
-    assert!(message.contains("does not exist") && message.contains("Settings"), "{message}");
     assert!(
-        events.borrow().iter().any(|event| matches!(event, pulsar_lsp::ServerEvent::Error(m) if *m == message)),
+        message.contains("does not exist") && message.contains("Settings"),
+        "{message}"
+    );
+    assert!(
+        events
+            .borrow()
+            .iter()
+            .any(|event| matches!(event, pulsar_lsp::ServerEvent::Error(m) if *m == message)),
         "the toast carries the same words"
     );
     // The footer offers the managed install: it is on the spec, and never runs by itself.
-    let installer = server.read_with(cx, |server, _| server.installer()).expect("an install is offered");
+    let installer = server
+        .read_with(cx, |server, _| server.installer())
+        .expect("an install is offered");
     assert_eq!(installer.label, "Install typescript-language-server");
     let described = (installer.describe)();
-    assert!(described.contains("registry.npmjs.org") && described.contains("pinned"), "{described}");
+    assert!(
+        described.contains("registry.npmjs.org") && described.contains("pinned"),
+        "{described}"
+    );
 }
 
 // ---- real spawns (need Node; skipped without it) -----------------------------
@@ -360,7 +489,10 @@ fn node_is_installed() -> bool {
 /// published.
 fn smoke(cx: &mut TestAppContext, path: PathBuf, project: &Project) -> String {
     let store = cx.new(|_| DiagnosticsStore::new());
-    let settings = ServerSettings { path: Some(path), ..ServerSettings::default() };
+    let settings = ServerSettings {
+        path: Some(path),
+        ..ServerSettings::default()
+    };
     let server = server_for(cx, project, settings, store.clone());
     server.update(cx, |server, cx| server.start(cx));
     wait_for(cx, "the real server to be ready", |cx| {
@@ -372,12 +504,23 @@ fn smoke(cx: &mut TestAppContext, path: PathBuf, project: &Project) -> String {
         status == ServerStatus::Ready
     });
     let text = std::fs::read_to_string(&project.class).unwrap();
-    server.read_with(cx, |server, _| server.did_open_file(&project.class, &text, "typescript").unwrap());
-    wait_for(cx, "the real server's diagnostics", |cx| {
-        !store.read_with(cx, |store, _| store.for_file(&project.class)).is_empty()
+    server.read_with(cx, |server, _| {
+        server
+            .did_open_file(&project.class, &text, "typescript")
+            .unwrap()
     });
-    let message = store.read_with(cx, |store, _| store.for_file(&project.class))[0].1.message.clone();
-    server.update(cx, |server, cx| server.stop(pulsar_lsp::StopReason::Requested, cx));
+    wait_for(cx, "the real server's diagnostics", |cx| {
+        !store
+            .read_with(cx, |store, _| store.for_file(&project.class))
+            .is_empty()
+    });
+    let message = store.read_with(cx, |store, _| store.for_file(&project.class))[0]
+        .1
+        .message
+        .clone();
+    server.update(cx, |server, cx| {
+        server.stop(pulsar_lsp::StopReason::Requested, cx)
+    });
     message
 }
 
@@ -391,11 +534,18 @@ fn smoke_a_real_node_process_runs_the_entry_point_directly(cx: &mut TestAppConte
     }
     activate();
     let project = project(DOOR);
-    let package = project.root.join("fake").join("node_modules").join("typescript-language-server");
+    let package = project
+        .root
+        .join("fake")
+        .join("node_modules")
+        .join("typescript-language-server");
     std::fs::create_dir_all(package.join("lib")).unwrap();
     std::fs::write(package.join("lib").join("cli.mjs"), FAKE_CLI).unwrap();
     let message = smoke(cx, package.join("lib").join("cli.mjs"), &project);
-    assert_eq!(message, "real node saw --stdio", "launched as `node cli.mjs --stdio`");
+    assert_eq!(
+        message, "real node saw --stdio",
+        "launched as `node cli.mjs --stdio`"
+    );
 }
 
 /// On Windows, a configured `.cmd` shim with no entry point beside it is the

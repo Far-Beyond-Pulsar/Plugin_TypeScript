@@ -120,7 +120,10 @@ pub(crate) fn install_dir() -> PathBuf {
 
 /// The server's entry point inside an install folder.
 fn entry_in(dir: &Path) -> PathBuf {
-    dir.join("node_modules").join(PACKAGE).join("lib").join("cli.mjs")
+    dir.join("node_modules")
+        .join(PACKAGE)
+        .join("lib")
+        .join("cli.mjs")
 }
 
 /// TypeScript's server inside an install folder (what the language server
@@ -221,8 +224,9 @@ pub(crate) fn install_pins(
                 )));
             }
             report(&format!("Unpacking {} {}...", pin.name, pin.version));
-            extract_tgz(&bytes, &staging.join("node_modules").join(pin.name))
-                .map_err(|e| LocateError::new(format!("{} could not be unpacked: {e:#}", pin.name)))?;
+            extract_tgz(&bytes, &staging.join("node_modules").join(pin.name)).map_err(|e| {
+                LocateError::new(format!("{} could not be unpacked: {e:#}", pin.name))
+            })?;
             let _ = std::fs::remove_file(&file);
         }
         if !is_complete(&staging) {
@@ -262,42 +266,14 @@ fn install(ctx: &InstallContext) -> Result<(), LocateError> {
     install_pins(&PINS, &install_dir(), &|text| ctx.report(text), &download)
 }
 
-/// Fetch `url` into `dest` over HTTPS with the system's `curl` (every
-/// supported OS ships it; Windows also has PowerShell, tried second). The
-/// transport is not trusted: the caller checks the digest.
+/// Fetch `url` into `dest` over HTTPS, in process (`pulsar_language`'s
+/// client; no system `curl` or PowerShell, #1940). The transport is not
+/// trusted: the caller checks the digest.
+// The engine's tools directory, outside any project.
+#[allow(clippy::disallowed_methods)]
 fn download(url: &str, dest: &Path) -> Result<(), String> {
-    let curl = quiet_command("curl")
-        .args(["--fail", "--silent", "--show-error", "--location"])
-        .args(["--proto", "=https", "--proto-redir", "=https", "--max-time", "900"])
-        .arg("--output")
-        .arg(dest)
-        .arg(url)
-        .output();
-    let mut failure = match curl {
-        Ok(output) if output.status.success() => return Ok(()),
-        Ok(output) => String::from_utf8_lossy(&output.stderr).trim().to_string(),
-        Err(error) => format!("curl could not run: {error}"),
-    };
-    if cfg!(windows) {
-        // Inside a PowerShell single-quoted string only `'` is special.
-        let quote = |text: &str| format!("'{}'", text.replace('\'', "''"));
-        let script = format!(
-            "$ProgressPreference='SilentlyContinue'; Invoke-WebRequest -UseBasicParsing -Uri {} -OutFile {}",
-            quote(url),
-            quote(&dest.to_string_lossy())
-        );
-        match quiet_command("powershell")
-            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
-            .output()
-        {
-            Ok(output) if output.status.success() => return Ok(()),
-            Ok(output) => {
-                failure = format!("{failure}; powershell: {}", String::from_utf8_lossy(&output.stderr).trim())
-            }
-            Err(error) => failure = format!("{failure}; powershell could not run: {error}"),
-        }
-    }
-    Err(format!("could not download {url}: {failure}"))
+    let bytes = pulsar_language::download::fetch(url)?;
+    std::fs::write(dest, bytes).map_err(|e| format!("could not write {}: {e}", dest.display()))
 }
 
 #[cfg(test)]
@@ -314,7 +290,10 @@ mod tests {
     }
 
     fn typescript_tgz() -> Vec<u8> {
-        tgz(&[("package.json", br#"{"name":"typescript"}"#), ("lib/tsserver.js", b"// tsserver")])
+        tgz(&[
+            ("package.json", br#"{"name":"typescript"}"#),
+            ("lib/tsserver.js", b"// tsserver"),
+        ])
     }
 
     /// Pins of the synthetic tarballs, with their real digests.
@@ -337,7 +316,10 @@ mod tests {
         ]
     }
 
-    fn fetcher<'a>(server: &'a [u8], ts: &'a [u8]) -> impl Fn(&str, &Path) -> Result<(), String> + 'a {
+    fn fetcher<'a>(
+        server: &'a [u8],
+        ts: &'a [u8],
+    ) -> impl Fn(&str, &Path) -> Result<(), String> + 'a {
         move |url, dest| {
             let body = if url.contains("server") { server } else { ts };
             std::fs::write(dest, body).map_err(|e| e.to_string())
@@ -348,17 +330,32 @@ mod tests {
     fn a_verified_download_is_unpacked_whole_into_place() {
         let (server, ts) = (server_tgz(), typescript_tgz());
         let tools = tempfile::tempdir().unwrap();
-        let dest = tools.path().join("typescript-language-server").join("release");
+        let dest = tools
+            .path()
+            .join("typescript-language-server")
+            .join("release");
         let said = RefCell::new(Vec::new());
-        install_pins(&pins_for(&server, &ts), &dest, &|t| said.borrow_mut().push(t.to_string()), &fetcher(&server, &ts))
-            .unwrap();
+        install_pins(
+            &pins_for(&server, &ts),
+            &dest,
+            &|t| said.borrow_mut().push(t.to_string()),
+            &fetcher(&server, &ts),
+        )
+        .unwrap();
         assert!(is_complete(&dest));
         assert_eq!(std::fs::read(entry_in(&dest)).unwrap(), b"// server");
-        assert!(!tools.path().join("typescript-language-server").join("release.partial").exists());
+        assert!(!tools
+            .path()
+            .join("typescript-language-server")
+            .join("release.partial")
+            .exists());
         let said = said.into_inner();
         assert!(said.iter().any(|t| t.starts_with("Verifying")), "{said:?}");
         // The entry point is what discovery uses afterwards.
-        assert_eq!(entry_in(&dest), dest.join("node_modules/typescript-language-server/lib/cli.mjs"));
+        assert_eq!(
+            entry_in(&dest),
+            dest.join("node_modules/typescript-language-server/lib/cli.mjs")
+        );
     }
 
     #[test]
@@ -367,7 +364,10 @@ mod tests {
         let tools = tempfile::tempdir().unwrap();
         let dest = tools.path().join("tsls").join("release");
         // The pins say one thing, the network delivers another.
-        let tampered = tgz(&[("package.json", b"{}"), ("lib/cli.mjs", b"// something else")]);
+        let tampered = tgz(&[
+            ("package.json", b"{}"),
+            ("lib/cli.mjs", b"// something else"),
+        ]);
         let error = install_pins(
             &pins_for(&server, &ts),
             &dest,
@@ -375,10 +375,16 @@ mod tests {
             &fetcher(&tampered, &ts),
         )
         .unwrap_err();
-        assert!(error.message.contains("does not match the digest pinned"), "{error}");
+        assert!(
+            error.message.contains("does not match the digest pinned"),
+            "{error}"
+        );
         assert!(error.message.contains("nothing was installed"), "{error}");
         assert!(!dest.exists(), "no install");
-        assert!(!tools.path().join("tsls").join("release.partial").exists(), "no staging left");
+        assert!(
+            !tools.path().join("tsls").join("release.partial").exists(),
+            "no staging left"
+        );
         assert!(managed_like_entry_absent(&dest));
     }
 
@@ -391,12 +397,9 @@ mod tests {
         let (server, ts) = (server_tgz(), typescript_tgz());
         let tools = tempfile::tempdir().unwrap();
         let dest = tools.path().join("tsls").join("release");
-        let error = install_pins(
-            &pins_for(&server, &ts),
-            &dest,
-            &|_| {},
-            &|url, _| Err(format!("could not download {url}: offline")),
-        )
+        let error = install_pins(&pins_for(&server, &ts), &dest, &|_| {}, &|url, _| {
+            Err(format!("could not download {url}: offline"))
+        })
         .unwrap_err();
         assert!(error.message.contains("offline"), "{error}");
         assert!(!dest.exists());
@@ -409,7 +412,13 @@ mod tests {
         let dest = tools.path().join("tsls").join("release");
         std::fs::create_dir_all(dest.join("node_modules/stale")).unwrap();
         std::fs::write(dest.join("node_modules/stale/old.js"), "old").unwrap();
-        install_pins(&pins_for(&server, &ts), &dest, &|_| {}, &fetcher(&server, &ts)).unwrap();
+        install_pins(
+            &pins_for(&server, &ts),
+            &dest,
+            &|_| {},
+            &fetcher(&server, &ts),
+        )
+        .unwrap();
         assert!(is_complete(&dest));
         assert!(!dest.join("node_modules/stale").exists());
     }
@@ -417,7 +426,11 @@ mod tests {
     #[test]
     fn the_pins_are_well_formed_and_named_in_what_the_person_approves() {
         for pin in PINS {
-            assert!(pin.url.starts_with("https://registry.npmjs.org/"), "{}", pin.url);
+            assert!(
+                pin.url.starts_with("https://registry.npmjs.org/"),
+                "{}",
+                pin.url
+            );
             assert!(pin.url.contains(pin.version), "{}", pin.url);
             let want = match pin.digest {
                 Digest::Sha256(_) => 64,
@@ -425,21 +438,35 @@ mod tests {
             };
             let hex = pin.digest.expected();
             assert_eq!(hex.len(), want, "{}", pin.name);
-            assert!(hex.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()), "{}", pin.name);
+            assert!(
+                hex.chars()
+                    .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
+                "{}",
+                pin.name
+            );
         }
         let text = describe();
-        assert!(text.contains("registry.npmjs.org") && text.contains("4.4.0") && text.contains("5.9.3"), "{text}");
+        assert!(
+            text.contains("registry.npmjs.org") && text.contains("4.4.0") && text.contains("5.9.3"),
+            "{text}"
+        );
         assert!(install_dir().ends_with(release()));
     }
 
     #[test]
     fn digests_know_their_known_answers() {
         // sha256("abc") and sha512("abc"), the standard test vectors.
-        assert!(Digest::Sha256("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad").matches(b"abc"));
+        assert!(
+            Digest::Sha256("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+                .matches(b"abc")
+        );
         assert!(Digest::Sha512(
             "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"
         )
         .matches(b"abc"));
-        assert!(!Digest::Sha256("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad").matches(b"abd"));
+        assert!(!Digest::Sha256(
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        )
+        .matches(b"abd"));
     }
 }

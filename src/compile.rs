@@ -42,7 +42,13 @@ fn read_schema(class: &str, schema_path: &Path) -> Result<Option<ClassSchema>, C
     match vfs::read_to_string(schema_path) {
         Ok(text) => serde_json::from_str::<ClassSchema>(&text)
             .map(Some)
-            .map_err(|e| diagnostic(class, schema_path, format!("`{SCHEMA_FILE}` is not valid: {e}"))),
+            .map_err(|e| {
+                diagnostic(
+                    class,
+                    schema_path,
+                    format!("`{SCHEMA_FILE}` is not valid: {e}"),
+                )
+            }),
         Err(_) => Ok(None),
     }
 }
@@ -75,7 +81,11 @@ pub fn check_class_source(
     problems_of(&class, &file, &compiled.diagnostics)
 }
 
-fn problems_of(class: &str, file: &Path, diagnostics: &[pulsar_script_ts::Diagnostic]) -> Vec<CompileDiagnostic> {
+fn problems_of(
+    class: &str,
+    file: &Path,
+    diagnostics: &[pulsar_script_ts::Diagnostic],
+) -> Vec<CompileDiagnostic> {
     diagnostics
         .iter()
         .map(|d| CompileDiagnostic {

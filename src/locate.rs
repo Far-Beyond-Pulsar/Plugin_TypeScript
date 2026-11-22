@@ -62,7 +62,13 @@ impl Surroundings {
             .map(|path| std::env::split_paths(&path).collect())
             .unwrap_or_default();
         let mut node_dirs = Vec::new();
-        for var in ["ProgramFiles", "ProgramW6432", "LOCALAPPDATA", "NVM_SYMLINK", "NVM_HOME"] {
+        for var in [
+            "ProgramFiles",
+            "ProgramW6432",
+            "LOCALAPPDATA",
+            "NVM_SYMLINK",
+            "NVM_HOME",
+        ] {
             if let Some(base) = std::env::var_os(var) {
                 let base = PathBuf::from(base);
                 node_dirs.push(base.join("nodejs"));
@@ -91,7 +97,11 @@ fn node_file_names() -> &'static [&'static str] {
 
 fn server_file_names() -> &'static [&'static str] {
     if cfg!(windows) {
-        &["typescript-language-server.cmd", "typescript-language-server.exe", "typescript-language-server"]
+        &[
+            "typescript-language-server.cmd",
+            "typescript-language-server.exe",
+            "typescript-language-server",
+        ]
     } else {
         &["typescript-language-server"]
     }
@@ -121,12 +131,20 @@ pub(crate) fn find_node(surroundings: &Surroundings, beside: Option<&Path>) -> O
 
 /// The Node's major version (`v22.22.3` is 22), asked of the executable.
 pub(crate) fn node_major(node: &Path) -> Option<u32> {
-    let output = crate::install::quiet_command(node).arg("--version").output().ok()?;
+    let output = crate::install::quiet_command(node)
+        .arg("--version")
+        .output()
+        .ok()?;
     parse_node_major(&String::from_utf8_lossy(&output.stdout))
 }
 
 pub(crate) fn parse_node_major(text: &str) -> Option<u32> {
-    text.trim().trim_start_matches('v').split('.').next()?.parse().ok()
+    text.trim()
+        .trim_start_matches('v')
+        .split('.')
+        .next()?
+        .parse()
+        .ok()
 }
 
 /// What a located file turns out to be.
@@ -216,7 +234,10 @@ fn resolve(file: &Path) -> Resolved {
     let candidates = [
         dir.join("node_modules").join(PACKAGE),
         dir.join("..").join(PACKAGE),
-        dir.join("..").join("lib").join("node_modules").join(PACKAGE),
+        dir.join("..")
+            .join("lib")
+            .join("node_modules")
+            .join(PACKAGE),
     ];
     for candidate in candidates {
         if let Some(entry) = package_entry(&candidate) {
@@ -289,7 +310,11 @@ pub(crate) fn locate_with(
 ) -> Result<Located, LocateError> {
     let launch = |file: &Path, source: Source| -> Result<Located, LocateError> {
         let (command, via_shim) = command_for(resolve(file), surroundings, node_major_of)?;
-        Ok(Located { command, source, via_shim })
+        Ok(Located {
+            command,
+            source,
+            via_shim,
+        })
     };
 
     // 1. The person's setting: used, or reported; never replaced.
@@ -335,7 +360,12 @@ pub(crate) fn locate_here(
     project_root: &Path,
     configured: Option<&Path>,
 ) -> Result<Located, LocateError> {
-    locate_with(&Surroundings::current(), project_root, configured, &node_major)
+    locate_with(
+        &Surroundings::current(),
+        project_root,
+        configured,
+        &node_major,
+    )
 }
 
 #[cfg(test)]
@@ -362,13 +392,20 @@ mod tests {
         touch(&root.join(node_name()), "");
         touch(&root.join(shim_name()), "@echo off");
         let package = root.join("node_modules").join(PACKAGE);
-        touch(&package.join("package.json"), r#"{"bin":{"typescript-language-server":"lib/cli.mjs"}}"#);
+        touch(
+            &package.join("package.json"),
+            r#"{"bin":{"typescript-language-server":"lib/cli.mjs"}}"#,
+        );
         touch(&package.join("lib").join("cli.mjs"), "// server");
         package.join("lib").join("cli.mjs")
     }
 
     fn surroundings(path_dirs: Vec<PathBuf>) -> Surroundings {
-        Surroundings { path_dirs, node_dirs: Vec::new(), managed_entry: None }
+        Surroundings {
+            path_dirs,
+            node_dirs: Vec::new(),
+            managed_entry: None,
+        }
     }
 
     const NODE_22: &dyn Fn(&Path) -> Option<u32> = &|_| Some(22);
@@ -387,7 +424,13 @@ mod tests {
         .unwrap();
         assert_eq!(located.source, Source::Path);
         assert!(!located.via_shim, "the entry point was found, so no shim");
-        let program = located.command.program.file_name().unwrap().to_string_lossy().to_lowercase();
+        let program = located
+            .command
+            .program
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .to_lowercase();
         assert!(program.starts_with("node"), "{program}");
         assert!(!program.ends_with(".cmd") && !program.ends_with(".bat"));
         assert_eq!(located.command.args[0], entry.as_os_str());
@@ -431,7 +474,10 @@ mod tests {
         )
         .unwrap();
         assert_eq!(located.source, Source::ProjectLocal);
-        assert_eq!(located.command.args[0], package.join("lib").join("cli.mjs").as_os_str());
+        assert_eq!(
+            located.command.args[0],
+            package.join("lib").join("cli.mjs").as_os_str()
+        );
     }
 
     #[test]
@@ -447,9 +493,17 @@ mod tests {
         assert_eq!(located.source, Source::Configured);
         assert_eq!(located.command.args[0], mine.as_os_str());
 
-        let error = locate_with(&around, project.path(), Some(&project.path().join("nope")), NODE_22)
-            .unwrap_err();
-        assert!(error.missing && error.message.contains("does not exist"), "{error}");
+        let error = locate_with(
+            &around,
+            project.path(),
+            Some(&project.path().join("nope")),
+            NODE_22,
+        )
+        .unwrap_err();
+        assert!(
+            error.missing && error.message.contains("does not exist"),
+            "{error}"
+        );
     }
 
     #[test]
@@ -483,15 +537,25 @@ mod tests {
         )
         .unwrap_err();
         assert!(error.missing);
-        assert!(error.message.contains("typescript-language-server"), "{error}");
-        assert!(error.message.contains("Install"), "it points at the install action: {error}");
-        assert!(error.message.contains("npm i -g"), "and at the manual way: {error}");
+        assert!(
+            error.message.contains("typescript-language-server"),
+            "{error}"
+        );
+        assert!(
+            error.message.contains("Install"),
+            "it points at the install action: {error}"
+        );
+        assert!(
+            error.message.contains("npm i -g"),
+            "and at the manual way: {error}"
+        );
     }
 
     #[test]
     fn no_node_is_reported_first_and_says_where_to_get_it() {
         let project = tempfile::tempdir().unwrap();
-        let error = locate_with(&surroundings(Vec::new()), project.path(), None, NODE_22).unwrap_err();
+        let error =
+            locate_with(&surroundings(Vec::new()), project.path(), None, NODE_22).unwrap_err();
         assert!(error.missing);
         assert!(error.message.contains("Node.js was not found"), "{error}");
         assert!(error.message.contains("nodejs.org"), "{error}");
@@ -523,7 +587,10 @@ mod tests {
             &|_| Some(14),
         )
         .unwrap_err();
-        assert!(error.missing && error.message.contains("Node.js 14 is too old"), "{error}");
+        assert!(
+            error.missing && error.message.contains("Node.js 14 is too old"),
+            "{error}"
+        );
     }
 
     #[test]

@@ -52,7 +52,8 @@ fn entries(tar: &[u8]) -> Result<Vec<Entry>> {
         if header.iter().all(|b| *b == 0) {
             break;
         }
-        let size = octal(&header[124..136]).ok_or_else(|| anyhow!("a tar header has a bad size"))?;
+        let size =
+            octal(&header[124..136]).ok_or_else(|| anyhow!("a tar header has a bad size"))?;
         let kind = header[156];
         let body_start = at + BLOCK;
         let body_end = body_start
@@ -111,7 +112,11 @@ fn header_name(header: &[u8]) -> String {
     };
     let name = text(0..100);
     let is_ustar = &header[257..262] == b"ustar";
-    let prefix = if is_ustar { text(345..500) } else { String::new() };
+    let prefix = if is_ustar {
+        text(345..500)
+    } else {
+        String::new()
+    };
     if prefix.is_empty() {
         name
     } else {
@@ -207,14 +212,24 @@ pub(crate) mod tests {
             ("lib/cli.mjs", b"console.log(1)"),
         ]);
         extract_tgz(&archive, dir.path()).unwrap();
-        assert_eq!(std::fs::read(dir.path().join("package.json")).unwrap(), b"{\"name\":\"x\"}");
-        assert_eq!(std::fs::read(dir.path().join("lib/cli.mjs")).unwrap(), b"console.log(1)");
+        assert_eq!(
+            std::fs::read(dir.path().join("package.json")).unwrap(),
+            b"{\"name\":\"x\"}"
+        );
+        assert_eq!(
+            std::fs::read(dir.path().join("lib/cli.mjs")).unwrap(),
+            b"console.log(1)"
+        );
     }
 
     #[test]
     fn a_path_that_leaves_the_destination_is_refused() {
         let dir = tempfile::tempdir().unwrap();
-        for name in ["package/../evil.js", "/abs/evil.js", "package/lib/../../evil.js"] {
+        for name in [
+            "package/../evil.js",
+            "/abs/evil.js",
+            "package/lib/../../evil.js",
+        ] {
             let mut tar = tar_entry(name, b'0', b"x");
             tar.extend(vec![0u8; BLOCK * 2]);
             let mut gz = GzEncoder::new(Vec::new(), Compression::fast());

@@ -199,9 +199,17 @@ mod tests {
 
         let tool = p.join("tools/build/script.ts");
         std::fs::create_dir_all(tool.parent().unwrap()).unwrap();
-        assert_eq!(root_of(&tool, p), Some(p.to_path_buf()), "no tsconfig: the project");
+        assert_eq!(
+            root_of(&tool, p),
+            Some(p.to_path_buf()),
+            "no tsconfig: the project"
+        );
         std::fs::write(p.join("tools/tsconfig.json"), "{}").unwrap();
-        assert_eq!(root_of(&tool, p), Some(p.join("tools")), "the nearest tsconfig");
+        assert_eq!(
+            root_of(&tool, p),
+            Some(p.join("tools")),
+            "the nearest tsconfig"
+        );
     }
 
     #[test]
@@ -232,14 +240,23 @@ mod tests {
         let classes = classes_dir(p);
         std::fs::create_dir_all(classes.join("Door")).unwrap();
         prepare_workspace(&context(p, &classes)).unwrap();
-        assert_eq!(std::fs::read_to_string(classes.join("tsconfig.json")).unwrap(), tsconfig_text());
+        assert_eq!(
+            std::fs::read_to_string(classes.join("tsconfig.json")).unwrap(),
+            tsconfig_text()
+        );
         let declarations = std::fs::read_to_string(p.join("Pulsar/types/pulsar.d.ts")).unwrap();
-        assert!(declarations.contains("ScriptClass"), "the d.ts exists before the first compile");
+        assert!(
+            declarations.contains("ScriptClass"),
+            "the d.ts exists before the first compile"
+        );
 
         // A person who removed the marker line owns the file.
         std::fs::write(classes.join("tsconfig.json"), "{ \"mine\": true }").unwrap();
         prepare_workspace(&context(p, &classes)).unwrap();
-        assert_eq!(std::fs::read_to_string(classes.join("tsconfig.json")).unwrap(), "{ \"mine\": true }");
+        assert_eq!(
+            std::fs::read_to_string(classes.join("tsconfig.json")).unwrap(),
+            "{ \"mine\": true }"
+        );
 
         // Another root (a user's own tsconfig directory) is not ours to prepare.
         let other = p.join("tools");
@@ -257,8 +274,14 @@ mod tests {
             message: None,
             percentage: None,
         };
-        assert_eq!(progress(&begin(INITIALIZING)).unwrap().text, "Loading the TypeScript project...");
-        assert_eq!(progress(&begin("Finding references")).unwrap().text, "Finding references");
+        assert_eq!(
+            progress(&begin(INITIALIZING)).unwrap().text,
+            "Loading the TypeScript project..."
+        );
+        assert_eq!(
+            progress(&begin("Finding references")).unwrap().text,
+            "Finding references"
+        );
     }
 
     #[test]
@@ -274,11 +297,15 @@ mod tests {
         let mut ctx = context(Path::new("/p"), Path::new("/p/src/classes"));
         let options = SPEC.effective_initialization_options(&ctx);
         assert_eq!(options["disableAutomaticTypingAcquisition"], true);
-        ctx.settings.initialization_options = Some(json!({ "tsserver": { "logVerbosity": "verbose" } }));
+        ctx.settings.initialization_options =
+            Some(json!({ "tsserver": { "logVerbosity": "verbose" } }));
         let options = SPEC.effective_initialization_options(&ctx);
         assert_eq!(options["tsserver"]["logVerbosity"], "verbose");
         assert_eq!(options["hostInfo"], "Pulsar", "the rest is untouched");
-        assert_eq!(configuration(&ctx, "tsserver.logVerbosity"), json!("verbose"));
+        assert_eq!(
+            configuration(&ctx, "tsserver.logVerbosity"),
+            json!("verbose")
+        );
         assert_eq!(configuration(&ctx, "nothing"), Value::Null);
     }
 }

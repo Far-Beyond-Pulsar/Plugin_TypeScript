@@ -154,12 +154,7 @@ fn a_class_another_language_owns_is_not_compiled_and_its_artifacts_survive() {
     let (entry, store) =
         pulsar_class::ModuleStore::for_class_dir(&dir.path().join("src/classes/Door")).unwrap();
     store
-        .write(
-            &entry,
-            "test.other",
-            String::new(),
-            b"{\"from\":\"other\"}",
-        )
+        .write(&entry, "test.other", String::new(), b"{\"from\":\"other\"}")
         .unwrap();
     assert!(compile_project_classes(dir.path(), &natives()).is_empty());
     assert_eq!(
@@ -215,11 +210,15 @@ fn projects_without_typescript_compile_nothing_and_write_nothing() {
 #[test]
 fn the_language_is_discoverable_without_naming_the_crate() {
     let registry = pulsar_language::LanguageRegistry::current();
-    let typescript = registry.by_id("typescript").expect("registered by the plugin's build");
+    let typescript = registry
+        .by_id("typescript")
+        .expect("registered by the plugin's build");
     assert_eq!(typescript.display_name, "TypeScript");
     assert!(typescript.compiler.is_some());
     assert_eq!(
-        registry.for_path(Path::new("src/classes/Door/class.ts")).map(|l| l.id),
+        registry
+            .for_path(Path::new("src/classes/Door/class.ts"))
+            .map(|l| l.id),
         Some("typescript")
     );
     assert!(!registry.is_class_dir(Path::new("does-not-matter")));
