@@ -13,7 +13,6 @@ oxc_parser = "=0.152.0"
 oxc_span = "=0.152.0"
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]
 pulsar_script_math = { workspace = true }

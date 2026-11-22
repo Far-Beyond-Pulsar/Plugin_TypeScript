@@ -10,12 +10,16 @@ pub enum Severity {
 }
 
 /// One problem. `line` and `column` are 1-based; `0` means "no position".
+/// `end_line`/`end_column` are one past the problem's last character, when
+/// the source span is known (`0`: only the start is).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Diagnostic {
     pub severity: Severity,
     pub message: String,
     pub line: u32,
     pub column: u32,
+    pub end_line: u32,
+    pub end_column: u32,
 }
 
 impl Diagnostic {
@@ -25,6 +29,18 @@ impl Diagnostic {
             message: message.into(),
             line,
             column,
+            end_line: 0,
+            end_column: 0,
+        }
+    }
+
+    /// A problem over a source range: `start` and `end` (one past the last
+    /// character) as 1-based `(line, column)`.
+    pub fn spanning(message: impl Into<String>, start: (u32, u32), end: (u32, u32)) -> Self {
+        Self {
+            end_line: end.0,
+            end_column: end.1,
+            ..Self::error(message, start.0, start.1)
         }
     }
 
@@ -35,6 +51,12 @@ impl Diagnostic {
     /// `line:column`, for editors and `CompileDiagnostic::location`.
     pub fn location(&self) -> Option<String> {
         (self.line > 0).then(|| format!("{}:{}", self.line, self.column))
+    }
+
+    /// `line:column` one past the end, for `CompileDiagnostic::end_location`.
+    pub fn end_location(&self) -> Option<String> {
+        (self.line > 0 && self.end_line > 0)
+            .then(|| format!("{}:{}", self.end_line, self.end_column))
     }
 }
 

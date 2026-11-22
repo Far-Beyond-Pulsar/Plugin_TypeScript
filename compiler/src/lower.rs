@@ -26,7 +26,7 @@ use pulsar_script_vm::{
 
 use crate::declarations::callable;
 use crate::diagnostic::{Diagnostic, LineIndex};
-use crate::schema::{ClassSchema, DeclaredField};
+use pulsar_script_vm::{ClassSchema, DeclaredField};
 
 /// A class to compile.
 pub struct ClassSource<'a> {
@@ -58,10 +58,14 @@ pub fn compile_class(src: &ClassSource<'_>, natives: &NativeRegistry) -> Compile
     let mut cx = Cx::new(src, natives, lines);
 
     for error in parsed.diagnostics.errors() {
-        let offset = error.labels.first().map_or(0, |l| l.offset());
-        let (line, column) = cx.lines.position(src.source, offset);
+        let (offset, len) = error
+            .labels
+            .first()
+            .map_or((0, 0), |label| (label.offset(), label.len()));
+        let start = cx.lines.position(src.source, offset);
+        let end = cx.lines.position(src.source, offset + len);
         cx.diagnostics
-            .push(Diagnostic::error(error.message.to_string(), line, column));
+            .push(Diagnostic::spanning(error.message.to_string(), start, end));
     }
     if !cx.diagnostics.is_empty() {
         return Compiled {
@@ -121,9 +125,10 @@ impl<'a> Cx<'a> {
     }
 
     fn err(&mut self, span: Span, message: impl Into<String>) {
-        let (line, column) = self.lines.position(self.src.source, span.start);
+        let start = self.lines.position(self.src.source, span.start);
+        let end = self.lines.position(self.src.source, span.end);
         self.diagnostics
-            .push(Diagnostic::error(message, line, column));
+            .push(Diagnostic::spanning(message, start, end));
     }
 
     fn unsupported(&mut self, span: Span, what: &str) {

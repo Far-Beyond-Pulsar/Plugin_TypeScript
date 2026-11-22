@@ -96,6 +96,7 @@ fn problems_of(
             class: Some(class.to_owned()),
             file: Some(file.to_path_buf()),
             location: d.location(),
+            end_location: d.end_location(),
             message: d.message.clone(),
         })
         .collect()

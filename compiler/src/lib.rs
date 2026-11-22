@@ -74,9 +74,10 @@
 mod declarations;
 mod diagnostic;
 mod lower;
-mod schema;
 
 pub use declarations::{declarations, ts_name, ts_type};
 pub use diagnostic::{Diagnostic, Severity};
 pub use lower::{compile_class, ClassSource, Compiled};
-pub use schema::{ClassSchema, DeclaredField, SchemaField};
+// The schema lives in the script VM, beside `ModuleBuilder`: any text language
+// keeps its fields' ids the same way.
+pub use pulsar_script_vm::{ClassSchema, DeclaredField, SchemaField};

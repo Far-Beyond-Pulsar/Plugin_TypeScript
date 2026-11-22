@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use pulsar_language::spec::{InstallContext, LocateError, ServerInstaller};
-use sha2::{Digest as _, Sha256, Sha512};
+use sha2::{Digest as _, Sha256};
 
 use crate::archive::extract_tgz;
 use crate::locate::{self, PACKAGE};
@@ -25,27 +25,21 @@ use crate::locate::{self, PACKAGE};
 /// A digest a download must have.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Digest {
-    /// Lower-case hex, 64 characters. The verifier takes either; the pins use
-    /// the one npm publishes (sha512), and a pin moved to a sha256 of the
-    /// tarball needs no other change.
-    #[allow(dead_code)]
+    /// Lower-case hex, 64 characters: the sha256 of the tarball, as every
+    /// managed install pins (rust-analyzer's too, #1929).
     Sha256(&'static str),
-    /// Lower-case hex, 128 characters (npm publishes this one, as its
-    /// `dist.integrity`).
-    Sha512(&'static str),
 }
 
 impl Digest {
     fn name(self) -> &'static str {
         match self {
             Self::Sha256(_) => "sha256",
-            Self::Sha512(_) => "sha512",
         }
     }
 
     fn expected(self) -> &'static str {
         match self {
-            Self::Sha256(hex) | Self::Sha512(hex) => hex,
+            Self::Sha256(hex) => hex,
         }
     }
 
@@ -53,7 +47,6 @@ impl Digest {
     pub(crate) fn of(self, bytes: &[u8]) -> String {
         match self {
             Self::Sha256(_) => hex(&Sha256::digest(bytes)),
-            Self::Sha512(_) => hex(&Sha512::digest(bytes)),
         }
     }
 
@@ -80,24 +73,25 @@ pub(crate) struct Pin {
     pub digest: Digest,
 }
 
-/// The pinned release (npm's published `dist.integrity` of each tarball, as
-/// hex). Moving a pin is a deliberate edit of this table: new version, new
-/// URL, new digest, and `RELEASE` so the install folder changes with it.
+/// The pinned release: each tarball's sha256 (checked, when it was pinned,
+/// against npm's published sha512 `dist.integrity` of the same file). Moving a
+/// pin is a deliberate edit of this table: new version, new URL, new digest,
+/// and `RELEASE` so the install folder changes with it.
 pub(crate) const PINS: [Pin; 2] = [
     Pin {
         name: "typescript-language-server",
         version: "4.4.0",
         url: "https://registry.npmjs.org/typescript-language-server/-/typescript-language-server-4.4.0.tgz",
-        digest: Digest::Sha512(
-            "7a75a1a658475fb3c0d2af8870a1c13294d087d2360666f72f8e6bc279004c732c67b60b76ecb209d3a655458949865f9166813222b08bf7b6150a38c6c29e5b",
+        digest: Digest::Sha256(
+            "bc1d4ae48f4128f607b2b2d75c67f62ebfff6d098a2c405035e51d0f9a9d6958",
         ),
     },
     Pin {
         name: "typescript",
         version: "5.9.3",
         url: "https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz",
-        digest: Digest::Sha512(
-            "8e5d6f6733c38a72ebf5e52ddc9feded5e8580d130f508ef04f772b33f4a7d00c3e357d0ac2d98e2f290762694a454f86d795bd511e12e9a7cc2d9ba3394e04b",
+        digest: Digest::Sha256(
+            "10e108c9cf7d5f2879053dff18515fb405abf2ccef63eaaf017d9c571687a1d3",
         ),
     },
 ];
@@ -311,7 +305,7 @@ mod tests {
                 name: "typescript",
                 version: "1.0.0",
                 url: "https://example.test/ts.tgz",
-                digest: Digest::Sha512(leak(Digest::Sha512("").of(ts))),
+                digest: Digest::Sha256(leak(Digest::Sha256("").of(ts))),
             },
         ]
     }
@@ -432,12 +426,8 @@ mod tests {
                 pin.url
             );
             assert!(pin.url.contains(pin.version), "{}", pin.url);
-            let want = match pin.digest {
-                Digest::Sha256(_) => 64,
-                Digest::Sha512(_) => 128,
-            };
             let hex = pin.digest.expected();
-            assert_eq!(hex.len(), want, "{}", pin.name);
+            assert_eq!(hex.len(), 64, "{}", pin.name);
             assert!(
                 hex.chars()
                     .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
@@ -455,15 +445,11 @@ mod tests {
 
     #[test]
     fn digests_know_their_known_answers() {
-        // sha256("abc") and sha512("abc"), the standard test vectors.
+        // sha256("abc"), the standard test vector.
         assert!(
             Digest::Sha256("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
                 .matches(b"abc")
         );
-        assert!(Digest::Sha512(
-            "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"
-        )
-        .matches(b"abc"));
         assert!(!Digest::Sha256(
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         )
